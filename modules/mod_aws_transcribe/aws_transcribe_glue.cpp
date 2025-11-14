@@ -102,9 +102,14 @@ public:
 		switch_core_session_t* session = switch_core_session_locate(sessionId);
     switch_channel_t *channel = switch_core_session_get_channel(session);
 
-		if (var = switch_channel_get_variable(channel, "AWS_SHOW_SPEAKER_LABEL")) {
+		// Speaker Diarization - Enabled by default (main feature of this module)
+		// To disable, set AWS_SHOW_SPEAKER_LABEL=false
+		const char* speaker_label_var = switch_channel_get_variable(channel, "AWS_SHOW_SPEAKER_LABEL");
+		if (!speaker_label_var || strcasecmp(speaker_label_var, "false") != 0) {
+			// Enable by default unless explicitly disabled
 			m_request.SetShowSpeakerLabel(true);
 		}
+
 		if (var = switch_channel_get_variable(channel, "AWS_ENABLE_CHANNEL_IDENTIFICATION")) {
 			m_request.SetEnableChannelIdentification(true);
 		}

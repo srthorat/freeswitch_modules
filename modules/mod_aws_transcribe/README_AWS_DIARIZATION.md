@@ -401,7 +401,9 @@ cat ~/.aws/credentials
 aws_transcribe <uuid> start <lang-code> [interim] [stereo|mono] [bugname] [{"speakers":["Name1","Name2"]}]
 ```
 
-### Example 1: Simple Transcription (No Speaker Diarization)
+### Example 1: Simple Transcription with Speaker Diarization (Default)
+
+**Note:** Speaker diarization is enabled by default in this module.
 
 ```bash
 # In fs_cli
@@ -409,19 +411,21 @@ aws_transcribe <uuid> start <lang-code> [interim] [stereo|mono] [bugname] [{"spe
 originate user/1000 &echo
 
 # Get UUID from output, then start transcription
-aws_transcribe <UUID> start en-US interim
+# Speaker diarization is automatically enabled
+aws_transcribe <UUID> start en-US interim stereo
 ```
 
-### Example 2: With Speaker Diarization
+### Example 2: Transcription with Speaker Names
 
-Enable speaker diarization with channel variable:
+Map speaker labels to actual names:
 
 ```bash
 # In fs_cli
-originate {AWS_SHOW_SPEAKER_LABEL=true}user/1000 &echo
-
 # Start transcription with speaker names
 aws_transcribe <UUID> start en-US interim stereo mybug {"speakers":["Alice","Bob"]}
+
+# To disable speaker diarization (not recommended):
+originate {AWS_SHOW_SPEAKER_LABEL=false}user/1000 &echo
 ```
 
 ### Example 3: FreeSWITCH Dialplan Integration
@@ -434,13 +438,12 @@ Create `/etc/freeswitch/dialplan/default/01_aws_transcribe.xml`:
   <extension name="transcribe_test">
     <condition field="destination_number" expression="^9999$">
 
-      <!-- Enable speaker diarization -->
-      <action application="set" data="AWS_SHOW_SPEAKER_LABEL=true"/>
+      <!-- Speaker diarization is enabled by default, no need to set variable -->
 
       <!-- Answer the call -->
       <action application="answer"/>
 
-      <!-- Start transcription -->
+      <!-- Start transcription with speaker names -->
       <action application="inline" data="aws_transcribe ${uuid} start en-US interim stereo transcribe_bug {&quot;speakers&quot;:[&quot;Caller&quot;,&quot;System&quot;]}"/>
 
       <!-- Play audio for testing -->
@@ -472,8 +475,7 @@ mrf.connect({address: '127.0.0.1', port: 8021, secret: 'ClueCon'})
     return mediaserver.createEndpoint({remoteSdp: remoteSdp});
   })
   .then((endpoint) => {
-    // Enable speaker diarization
-    endpoint.set('AWS_SHOW_SPEAKER_LABEL', 'true');
+    // Speaker diarization is enabled by default, no need to set variable
 
     // Start transcription with speaker names
     const speakers = {speakers: ["Agent: John", "Customer: Jane"]};
@@ -536,8 +538,9 @@ fs_cli -x "eval \${getenv(AWS_REGION)}"
 # Or create a test call:
 
 fs_cli
-> originate {AWS_SHOW_SPEAKER_LABEL=true}user/1000 &echo
+> originate user/1000 &echo
 # Note the UUID from output
+# Speaker diarization is enabled by default
 
 > aws_transcribe <UUID> start en-US interim stereo test_bug {"speakers":["Speaker1","Speaker2"]}
 # Should return: +OK Success
@@ -546,7 +549,7 @@ fs_cli
 
 # Check FreeSWITCH logs
 > console loglevel DEBUG
-# You should see transcription events
+# You should see transcription events with speaker labels
 
 # Stop transcription
 > aws_transcribe <UUID> stop test_bug
@@ -645,16 +648,22 @@ fs_cli
 
 ### Speaker diarization not working
 
+**Note:** Speaker diarization is enabled by default in this module.
+
 ```bash
-# Ensure AWS_SHOW_SPEAKER_LABEL is set
+# Check if speaker diarization was explicitly disabled
 fs_cli -x "uuid_getvar <UUID> AWS_SHOW_SPEAKER_LABEL"
-# Should return: true
+# Should NOT return "false"
 
 # Ensure using stereo mode
 # The command should include "stereo"
 aws_transcribe <UUID> start en-US interim stereo ...
 
-# Check transcription output for speaker_label field
+# Check transcription output for speaker_label field in the JSON response
+# You should see "speaker_label": "spk_0" or "spk_1"
+
+# If still not working, check FreeSWITCH logs
+tail -f /var/log/freeswitch/freeswitch.log | grep -i "speaker"
 ```
 
 ### Build errors
@@ -730,7 +739,7 @@ freeswitch hard core unlimited
 | **Word Confidence Scores** | ✅ Always Included | ❌ No | Part of standard response |
 | **Content Moderation** | ❌ Disabled | ⚠️ Yes | Requires vocabulary filter in AWS |
 | **Custom Vocabulary** | ❌ Disabled | ⚠️ Yes | Requires vocabulary in AWS |
-| **Speaker Diarization** | ❌ Disabled | ❌ No | Enable via channel variable |
+| **Speaker Diarization** | ✅ Enabled | ❌ No | Main feature, always on by default |
 
 ### PII Redaction (Sensitive Data Protection)
 
