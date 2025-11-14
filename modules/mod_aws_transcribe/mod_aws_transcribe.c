@@ -17,7 +17,6 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname);
 static void responseHandler(switch_core_session_t* session, const char * json, const char* bugname, struct speaker_meta* speakers) {
 	switch_event_t *event;
 	switch_channel_t *channel = switch_core_session_get_channel(session);
-	const char* uuid = switch_core_session_get_uuid(session);
 
 	if (0 == strcmp("vad_detected", json)) {
 		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_VAD_DETECTED);
@@ -178,14 +177,15 @@ SWITCH_STANDARD_API(aws_transcribe_function)
         char* lang = argv[2];
         int interim = argc > 3 && !strcmp(argv[3], "interim");
 				char *bugname = argc > 5 ? argv[5] : MY_BUG_NAME;
+				char* json_str = NULL;
+				int i;
 
 				// Parse speaker metadata from JSON (last argument)
 				struct speaker_meta speakers;
 				memset(&speakers, 0, sizeof(speakers));
 
 				// Check if we have a JSON metadata argument
-				char* json_str = NULL;
-				for (int i = 3; i < argc; i++) {
+				for (i = 3; i < argc; i++) {
 					if (argv[i] && argv[i][0] == '{') {
 						json_str = argv[i];
 						break;
@@ -199,7 +199,7 @@ SWITCH_STANDARD_API(aws_transcribe_function)
 						if (jSpeakers && cJSON_IsArray(jSpeakers)) {
 							int count = cJSON_GetArraySize(jSpeakers);
 							speakers.count = count > MAX_SPEAKERS ? MAX_SPEAKERS : count;
-							for (int i = 0; i < speakers.count; i++) {
+							for (i = 0; i < speakers.count; i++) {
 								cJSON* speaker = cJSON_GetArrayItem(jSpeakers, i);
 								if (cJSON_IsString(speaker)) {
 									strncpy(speakers.names[i], cJSON_GetStringValue(speaker), MAX_SPEAKER_NAME - 1);
