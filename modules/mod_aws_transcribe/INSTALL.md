@@ -837,6 +837,63 @@ curl -X POST "https://api-us2.pusher.com/apps/YOUR_APP_ID/events?auth_key=YOUR_K
 
 ---
 
+## Advanced AWS Transcribe Features
+
+The module supports additional AWS Transcribe features for enhanced functionality.
+
+### Features Overview
+
+| Feature | Default Status | External AWS Config Required |
+|---------|---------------|------------------------------|
+| **PII Redaction** | ❌ Disabled | ❌ No |
+| **Partial Results Stabilization** | ✅ Enabled | ❌ No |
+| **Auto Punctuation** | ✅ Always On | ❌ No |
+| **Word Confidence Scores** | ✅ Always Included | ❌ No |
+| **Content Moderation** | ❌ Disabled | ⚠️ Yes (AWS filter required) |
+| **Custom Vocabulary** | ❌ Disabled | ⚠️ Yes (AWS vocab required) |
+
+### PII Redaction
+
+Redact sensitive information (credit cards, SSN, names, etc.):
+
+```xml
+<!-- Redact all PII types -->
+<action application="set" data="AWS_CONTENT_REDACTION_TYPE=PII"/>
+
+<!-- Redact specific types -->
+<action application="set" data="AWS_CONTENT_REDACTION_TYPE=PII"/>
+<action application="set" data="AWS_PII_ENTITY_TYPES=CREDIT_DEBIT_NUMBER,SSN,PHONE"/>
+```
+
+**Supported:** ALL, CREDIT_DEBIT_NUMBER, SSN, NAME, PHONE, EMAIL, ADDRESS, BANK_ACCOUNT_NUMBER, etc.
+
+### Partial Results Stabilization
+
+**Enabled by default** - Improves interim result quality. To disable:
+
+```xml
+<action application="set" data="AWS_ENABLE_PARTIAL_RESULTS_STABILIZATION=false"/>
+```
+
+### Content Moderation
+
+Filter words (requires AWS vocabulary filter):
+
+```xml
+<action application="set" data="AWS_VOCABULARY_FILTER_NAME=profanity-filter"/>
+<action application="set" data="AWS_VOCABULARY_FILTER_METHOD=mask"/>
+```
+
+### Custom Vocabulary
+
+Improve domain term recognition (requires AWS vocabulary):
+
+```xml
+<action application="set" data="AWS_VOCABULARY_NAME=medical-terms"/>
+```
+
+---
+
 ## Security Best Practices
 
 1. **Never hardcode credentials** - Always use environment variables

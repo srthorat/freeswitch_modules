@@ -117,6 +117,54 @@ public:
 		if (var = switch_channel_get_variable(channel, "AWS_VOCABULARY_FILTER_METHOD")) {
 			m_request.SetVocabularyFilterMethod(VocabularyFilterMethodMapper::GetVocabularyFilterMethodForName(var));
 		}
+
+		// PII Redaction - Redacts sensitive data from transcripts
+		if (var = switch_channel_get_variable(channel, "AWS_CONTENT_REDACTION_TYPE")) {
+			if (strcasecmp(var, "PII") == 0) {
+				m_request.SetContentRedactionType(ContentRedactionType::PII);
+
+				// Default to ALL PII entity types if not specified
+				const char* pii_types = switch_channel_get_variable(channel, "AWS_PII_ENTITY_TYPES");
+				if (pii_types) {
+					// Parse comma-separated PII entity types
+					// Supported: ALL, BANK_ACCOUNT_NUMBER, BANK_ROUTING, CREDIT_DEBIT_NUMBER, CREDIT_DEBIT_CVV,
+					//            CREDIT_DEBIT_EXPIRY, PIN, EMAIL, ADDRESS, NAME, PHONE, SSN
+					Aws::Vector<PiiEntityType> entityTypes;
+					char* types_copy = strdup(pii_types);
+					char* token = strtok(types_copy, ",");
+					while (token) {
+						// Trim whitespace
+						while (*token == ' ') token++;
+						char* end = token + strlen(token) - 1;
+						while (end > token && *end == ' ') end--;
+						*(end + 1) = '\0';
+
+						PiiEntityType entityType = PiiEntityTypeMapper::GetPiiEntityTypeForName(token);
+						if (entityType != PiiEntityType::NOT_SET) {
+							entityTypes.push_back(entityType);
+						}
+						token = strtok(NULL, ",");
+					}
+					free(types_copy);
+
+					if (!entityTypes.empty()) {
+						m_request.SetPiiEntityTypes(entityTypes);
+					}
+				} else {
+					// Default: redact all PII types
+					m_request.SetPiiEntityTypes({PiiEntityType::ALL});
+				}
+			}
+		}
+
+		// Partial Results Stabilization - Improves interim result quality
+		// Enabled by default for better interim transcription accuracy
+		const char* stabilization = switch_channel_get_variable(channel, "AWS_ENABLE_PARTIAL_RESULTS_STABILIZATION");
+		if (!stabilization || strcasecmp(stabilization, "false") != 0) {
+			// Enable by default unless explicitly disabled
+			m_request.SetEnablePartialResultsStabilization(true);
+		}
+
     switch_core_session_rwunlock(session);
 	}
 
