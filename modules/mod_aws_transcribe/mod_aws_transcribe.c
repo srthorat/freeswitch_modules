@@ -1,4 +1,4 @@
-/* 
+/*
  *
  * mod_aws_transcribe.c -- Freeswitch module for using aws streaming transcribe api
  *
@@ -14,9 +14,10 @@ SWITCH_MODULE_DEFINITION(mod_aws_transcribe, mod_aws_transcribe_load, mod_aws_tr
 
 static switch_status_t do_stop(switch_core_session_t *session, char* bugname);
 
-static void responseHandler(switch_core_session_t* session, const char * json, const char* bugname) {
+static void responseHandler(switch_core_session_t* session, const char * json, const char* bugname, struct speaker_meta* speakers) {
 	switch_event_t *event;
 	switch_channel_t *channel = switch_core_session_get_channel(session);
+	const char* uuid = switch_core_session_get_uuid(session);
 
 	if (0 == strcmp("vad_detected", json)) {
 		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_VAD_DETECTED);
@@ -51,6 +52,7 @@ static void responseHandler(switch_core_session_t* session, const char * json, c
     }
     if (!error) {
     		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_RESULTS);
+				// Note: Speaker metadata is available in the 'speakers' parameter for custom processing
     }
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "json payload: %s.\n", json);
 		switch_channel_event_set_data(channel, event);
@@ -93,8 +95,8 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 	return SWITCH_TRUE;
 }
 
-static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, 
-  char* lang, int interim, char* bugname)
+static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags,
+  char* lang, int interim, char* bugname, struct speaker_meta* speakers)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_media_bug_t *bug;
@@ -116,7 +118,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 
 	samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
 
-	if (SWITCH_STATUS_FALSE == aws_transcribe_session_init(session, responseHandler, samples_per_second, flags & SMBF_STEREO ? 2 : 1, lang, interim, bugname, &pUserData)) {
+	if (SWITCH_STATUS_FALSE == aws_transcribe_session_init(session, responseHandler, samples_per_second, flags & SMBF_STEREO ? 2 : 1, lang, interim, bugname, speakers, &pUserData)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing aws speech session.\n");
 		return SWITCH_STATUS_FALSE;
 	}
@@ -145,10 +147,10 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname)
 	return status;
 }
 
-#define TRANSCRIBE_API_SYNTAX "<uuid> [start|stop] lang-code [interim] [stereo|mono] [bugname]"
+#define TRANSCRIBE_API_SYNTAX "<uuid> [start|stop] lang-code [interim] [stereo|mono] [bugname] [{\"speakers\":[\"Name1\",\"Name2\"]}]"
 SWITCH_STANDARD_API(aws_transcribe_function)
 {
-	char *mycmd = NULL, *argv[6] = { 0 };
+	char *mycmd = NULL, *argv[7] = { 0 };
 	int argc = 0;
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	switch_media_bug_flag_t flags = SMBF_READ_STREAM /* | SMBF_WRITE_STREAM | SMBF_READ_PING */;
@@ -157,7 +159,7 @@ SWITCH_STANDARD_API(aws_transcribe_function)
 		argc = switch_separate_string(mycmd, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
 	}
 
-	if (zstr(cmd) || 
+	if (zstr(cmd) ||
       (!strcasecmp(argv[1], "stop") && argc < 2) ||
       (!strcasecmp(argv[1], "start") && argc < 3) ||
       zstr(argv[0])) {
@@ -176,12 +178,47 @@ SWITCH_STANDARD_API(aws_transcribe_function)
         char* lang = argv[2];
         int interim = argc > 3 && !strcmp(argv[3], "interim");
 				char *bugname = argc > 5 ? argv[5] : MY_BUG_NAME;
+
+				// Parse speaker metadata from JSON (last argument)
+				struct speaker_meta speakers;
+				memset(&speakers, 0, sizeof(speakers));
+
+				// Check if we have a JSON metadata argument
+				char* json_str = NULL;
+				for (int i = 3; i < argc; i++) {
+					if (argv[i] && argv[i][0] == '{') {
+						json_str = argv[i];
+						break;
+					}
+				}
+
+				if (json_str) {
+					cJSON* jMeta = cJSON_Parse(json_str);
+					if (jMeta) {
+						cJSON* jSpeakers = cJSON_GetObjectItem(jMeta, "speakers");
+						if (jSpeakers && cJSON_IsArray(jSpeakers)) {
+							int count = cJSON_GetArraySize(jSpeakers);
+							speakers.count = count > MAX_SPEAKERS ? MAX_SPEAKERS : count;
+							for (int i = 0; i < speakers.count; i++) {
+								cJSON* speaker = cJSON_GetArrayItem(jSpeakers, i);
+								if (cJSON_IsString(speaker)) {
+									strncpy(speakers.names[i], cJSON_GetStringValue(speaker), MAX_SPEAKER_NAME - 1);
+									speakers.names[i][MAX_SPEAKER_NAME - 1] = '\0';
+								}
+							}
+							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO,
+								"Parsed %d speaker names from metadata\n", speakers.count);
+						}
+						cJSON_Delete(jMeta);
+					}
+				}
+
 				if (argc > 4 && !strcmp(argv[4], "stereo")) {
           flags |= SMBF_WRITE_STREAM ;
           flags |= SMBF_STEREO;
 				}
     		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "start transcribing %s %s %s\n", lang, interim ? "interim": "complete", bugname);
-				status = start_capture(lsession, flags, lang, interim, bugname);
+				status = start_capture(lsession, flags, lang, interim, bugname, &speakers);
 			}
 			switch_core_session_rwunlock(lsession);
 		}

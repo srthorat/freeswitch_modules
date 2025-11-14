@@ -50,10 +50,16 @@ public:
 		const char* awsAccessKeyId,
 		const char* awsSecretAccessKey,
 		const char* awsSessionToken,
-		responseHandler_t responseHandler
+		responseHandler_t responseHandler,
+		struct speaker_meta* speakers
   ) : m_sessionId(sessionId), m_bugname(bugname), m_finished(false), m_interim(interim), m_finishing(false), m_connected(false), m_connecting(false),
 	 		m_packets(0), m_responseHandler(responseHandler), m_pStream(nullptr),
 			m_audioBuffer(320 * (samples_per_second == 8000 ? 1 : 2), 15) {
+		if (speakers) {
+			memcpy(&m_speakers, speakers, sizeof(struct speaker_meta));
+		} else {
+			memset(&m_speakers, 0, sizeof(struct speaker_meta));
+		}
 		Aws::Client::ClientConfiguration config;
 		if (region != nullptr && strlen(region) > 0) config.region = region;
 		char keySnippet[20];
@@ -162,7 +168,7 @@ public:
 					cJSON_AddStringToObject(json, "type", "error");
 					cJSON_AddStringToObject(json, "error", message.c_str());
 					char* jsonString = cJSON_PrintUnformatted(json);
-					m_responseHandler(psession, jsonString, m_bugname.c_str());
+					m_responseHandler(psession, jsonString, m_bugname.c_str(), &m_speakers);
 					free(jsonString);
 					cJSON_Delete(json);
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p stream got error response %s : %s\n", this, message.c_str(), exception.c_str());
@@ -261,7 +267,7 @@ public:
 					s << "]";
 					if (0 != s.str().compare("[]") && (isFinal || m_interim)) {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::writing transcript %p: %s\n", this, s.str().c_str() );
-						m_responseHandler(psession, s.str().c_str(), m_bugname.c_str());
+						m_responseHandler(psession, s.str().c_str(), m_bugname.c_str(), &m_speakers);
 					}
 					TranscriptEvent empty;
 					m_transcript = empty;
@@ -315,6 +321,7 @@ private:
 	std::condition_variable m_cond;
 	std::deque< Aws::Vector<unsigned char> > m_deqAudio;
 	SimpleBuffer m_audioBuffer;
+	struct speaker_meta m_speakers;
 };
 
 static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, void *obj) {
@@ -322,7 +329,7 @@ static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, v
 	bool ok = true;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: starting cb %p\n", (void *) cb);
 	GStreamer* pStreamer = new GStreamer(cb->sessionId, cb->bugname, cb->channels, cb->lang, cb->interim, cb->samples_per_second,
-		cb->region, cb->awsAccessKeyId, cb->awsSecretAccessKey, cb->awsSessionToken, cb->responseHandler);
+		cb->region, cb->awsAccessKeyId, cb->awsSecretAccessKey, cb->awsSessionToken, cb->responseHandler, &cb->speakers);
 	if (!pStreamer) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: Error allocating streamer\n");
 		return nullptr;
@@ -395,7 +402,7 @@ extern "C" {
 
 	// start transcribe on a channel
 	switch_status_t aws_transcribe_session_init(switch_core_session_t *session, responseHandler_t responseHandler,
-          uint32_t samples_per_second, uint32_t channels, char* lang, int interim, char* bugname, void **ppUserData
+          uint32_t samples_per_second, uint32_t channels, char* lang, int interim, char* bugname, struct speaker_meta* speakers, void **ppUserData
 	) {
 		switch_status_t status = SWITCH_STATUS_SUCCESS;
 		switch_channel_t *channel = switch_core_session_get_channel(session);
@@ -451,6 +458,13 @@ extern "C" {
 		cb->interim = interim;
 		strncpy(cb->lang, lang, MAX_LANG);
 		cb->samples_per_second = sampleRate;
+
+		// Copy speaker metadata
+		if (speakers) {
+			memcpy(&cb->speakers, speakers, sizeof(struct speaker_meta));
+		} else {
+			memset(&cb->speakers, 0, sizeof(struct speaker_meta));
+		}
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "sample rate of rtp stream is %d\n", samples_per_second);
 		if (sampleRate != 8000) {
 			cb->resampler = speex_resampler_init(1, sampleRate, 16000, SWITCH_RESAMPLE_QUALITY, &err);

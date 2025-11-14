@@ -18,9 +18,17 @@
 
 #define MAX_LANG (12)
 #define MAX_REGION (32)
+#define MAX_SPEAKER_NAME (128)
+#define MAX_SPEAKERS (10)
+
+/* Speaker metadata for diarization */
+struct speaker_meta {
+	int count;
+	char names[MAX_SPEAKERS][MAX_SPEAKER_NAME];
+};
 
 /* per-channel data */
-typedef void (*responseHandler_t)(switch_core_session_t* session, const char * json, const char* bugname);
+typedef void (*responseHandler_t)(switch_core_session_t* session, const char * json, const char* bugname, struct speaker_meta* speakers);
 
 struct cap_cb {
 	switch_mutex_t *mutex;
