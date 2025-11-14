@@ -189,6 +189,48 @@ scl enable devtoolset-9 bash
 
 ### Step 3: Build mod_aws_transcribe
 
+There are two methods to build this module:
+
+#### Method A: Build Within FreeSWITCH Source Tree (Recommended)
+
+This method integrates the module with FreeSWITCH's build system.
+
+```bash
+# Set FreeSWITCH source directory
+export FS_SRC_DIR=/usr/src/freeswitch
+
+# Clone the module repository
+cd /usr/src
+sudo git clone https://github.com/srthorat/freeswitch_modules.git
+
+# Checkout the AWS diarization branch
+cd freeswitch_modules
+sudo git checkout claude/aws-transcribe-speaker-diarization-011CV5rDARmbG2qx8jdzGpq9
+
+# Copy module to FreeSWITCH source tree
+sudo cp -r modules/mod_aws_transcribe ${FS_SRC_DIR}/src/mod/applications/
+
+# Navigate to FreeSWITCH source directory
+cd ${FS_SRC_DIR}
+
+# Add module to build configuration
+# Edit modules.conf and uncomment or add:
+echo "applications/mod_aws_transcribe" | sudo tee -a modules.conf
+
+# Reconfigure and build
+./configure
+make mod_aws_transcribe
+sudo make mod_aws_transcribe-install
+
+# Verify installation
+ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+# The file should exist and be around 1-2 MB
+```
+
+#### Method B: Standalone Build with Direct Compilation
+
+This method compiles the module directly without autotools.
+
 ```bash
 # Clone the repository
 cd /usr/src
@@ -201,29 +243,46 @@ sudo git checkout claude/aws-transcribe-speaker-diarization-011CV5rDARmbG2qx8jdz
 # Navigate to module directory
 cd modules/mod_aws_transcribe
 
-# Set FreeSWITCH source directory (if not already set)
+# Set FreeSWITCH and AWS SDK paths
 export FS_SRC_DIR=/usr/src/freeswitch
+export AWS_SDK_DIR=${FS_SRC_DIR}/libs/aws-sdk-cpp
 
-# Generate build configuration files
-aclocal
-autoconf
-automake --add-missing
+# Compile C source
+gcc -fPIC -c mod_aws_transcribe.c \
+    -I${FS_SRC_DIR}/src/include \
+    -I${FS_SRC_DIR}/libs/apr/include \
+    -I${FS_SRC_DIR}/libs/apr-util/include \
+    -o mod_aws_transcribe.o
 
-# If automake complains about missing files, create them:
-touch NEWS README AUTHORS ChangeLog
+# Compile C++ source
+g++ -fPIC -std=c++11 -c aws_transcribe_glue.cpp \
+    -I${FS_SRC_DIR}/src/include \
+    -I${FS_SRC_DIR}/libs/apr/include \
+    -I${FS_SRC_DIR}/libs/apr-util/include \
+    -I${AWS_SDK_DIR}/aws-cpp-sdk-core/include \
+    -I${AWS_SDK_DIR}/aws-cpp-sdk-transcribestreaming/include \
+    -I${AWS_SDK_DIR}/build/.deps/install/include \
+    -o aws_transcribe_glue.o
 
-# Configure the module
-./configure --with-freeswitch-src=${FS_SRC_DIR}
+# Link into shared library
+g++ -shared -o mod_aws_transcribe.so \
+    mod_aws_transcribe.o aws_transcribe_glue.o \
+    -L${AWS_SDK_DIR}/build/.deps/install/lib \
+    -L${AWS_SDK_DIR}/build/aws-cpp-sdk-core \
+    -L${AWS_SDK_DIR}/build/aws-cpp-sdk-transcribestreaming \
+    -laws-cpp-sdk-transcribestreaming \
+    -laws-cpp-sdk-core \
+    -laws-c-event-stream \
+    -laws-checksums \
+    -laws-c-common \
+    -laws-crt-cpp \
+    -lpthread -lcurl -lcrypto -lssl -lz
 
-# If configure fails with "cannot find freeswitch headers", ensure:
-# 1. FreeSWITCH is installed or source is available
-# 2. FS_SRC_DIR points to the correct location
+# Install module
+sudo cp mod_aws_transcribe.so /usr/lib/freeswitch/mod/
 
-# Build the module
-make
-
-# If build is successful, install it
-sudo make install
+# Update library cache
+sudo ldconfig
 
 # Verify installation
 ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
@@ -687,18 +746,27 @@ ls -la
 ls /usr/src/freeswitch/libs/aws-sdk-cpp/build/aws-cpp-sdk-transcribestreaming/
 # Should see libaws-cpp-sdk-transcribestreaming.so
 
-# Check Makefile.am paths match your installation
-grep "aws-sdk-cpp" Makefile.am
+# Verify AWS SDK library path
+ls /usr/src/freeswitch/libs/aws-sdk-cpp/build/.deps/install/lib/
+# Should see libaws-cpp-sdk-*.so files
 
-# If paths don't match, update Makefile.am with correct paths
+# If libraries are missing, rebuild AWS SDK (see Step 2)
 ```
 
-**Error:** `aclocal: command not found`
+**Error:** Compilation errors with FreeSWITCH headers
 
 ```bash
-# Install autotools
-sudo apt-get install -y autoconf automake libtool  # Ubuntu/Debian
-sudo yum install -y autoconf automake libtool      # CentOS/RHEL
+# Verify FreeSWITCH source directory exists
+ls ${FS_SRC_DIR}/src/include/switch.h
+# Should exist
+
+# If FreeSWITCH source is not available, install it:
+cd /usr/src
+sudo git clone https://github.com/signalwire/freeswitch.git
+cd freeswitch
+sudo ./bootstrap.sh -j
+sudo ./configure
+# You don't need to compile FreeSWITCH, just need the headers
 ```
 
 ### Performance issues
