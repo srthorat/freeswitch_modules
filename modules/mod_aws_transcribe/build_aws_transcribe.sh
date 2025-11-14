@@ -13,7 +13,9 @@ echo "========================================="
 # Configuration
 FS_SRC_DIR=/usr/src/freeswitch
 AWS_SDK_DIR=${FS_SRC_DIR}/libs/aws-sdk-cpp
-MODULE_SRC=/home/user/freeswitch_modules/modules/mod_aws_transcribe
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODULE_SRC="${SCRIPT_DIR}"
 
 # Step 1: Wait for AWS SDK clone to complete (if still running)
 echo ""

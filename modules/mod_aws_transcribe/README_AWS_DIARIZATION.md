@@ -189,9 +189,38 @@ scl enable devtoolset-9 bash
 
 ### Step 3: Build mod_aws_transcribe
 
-There are two methods to build this module:
+> **Important:** If you encounter `undefined symbol: aws_transcribe_frame` when loading the module, it means the C++ glue code (`aws_transcribe_glue.cpp`) wasn't compiled. Use Option A (automated script) or ensure you compile **BOTH** `.c` and `.cpp` files when building manually.
 
-#### Method A: Build Within FreeSWITCH Source Tree (Recommended)
+There are three methods to build this module:
+
+#### Option A: Automated Build Script (Easiest)
+
+**Use this if you want an automated build that does everything for you.**
+
+```bash
+cd /path/to/freeswitch_modules/modules/mod_aws_transcribe
+
+# Complete automated build (includes AWS SDK + module)
+./build_aws_transcribe.sh
+
+# OR if AWS SDK is already built, build only the module:
+./build_module_simple.sh
+```
+
+The scripts will:
+- ✅ Build AWS C++ SDK (transcribestreaming only)
+- ✅ Copy module files to FreeSWITCH source
+- ✅ Compile **BOTH** C and C++ files
+- ✅ Link everything properly
+- ✅ Verify no undefined symbols
+
+**See QUICKSTART.md in this directory for details.**
+
+---
+
+#### Option B: Manual Build - Within FreeSWITCH Source Tree
+
+**Use this to understand the build process and integrate with FreeSWITCH's build system.**
 
 This method integrates the module with FreeSWITCH's build system.
 
@@ -229,7 +258,9 @@ ls -la /usr/local/freeswitch/mod/mod_aws_transcribe.so
 # The file should exist and be around 1-2 MB
 ```
 
-#### Method B: Standalone Build with Direct Compilation
+---
+
+#### Option C: Manual Build - Standalone Direct Compilation
 
 This method compiles the module directly without autotools.
 

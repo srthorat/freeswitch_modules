@@ -39,7 +39,7 @@ make install
 **Time:** ~2-3 minutes
 
 ```bash
-cd /home/user/freeswitch_modules
+cd /path/to/freeswitch_modules/modules/mod_aws_transcribe
 ./build_module_simple.sh
 ```
 
