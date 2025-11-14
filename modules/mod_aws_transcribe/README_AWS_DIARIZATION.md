@@ -720,15 +720,265 @@ freeswitch hard core unlimited
 
 ## Advanced Configuration
 
-### Custom Language Models
+### Features Overview
 
-Set channel variables:
+| Feature | Default Status | External AWS Config Required | Notes |
+|---------|---------------|------------------------------|-------|
+| **PII Redaction** | ❌ Disabled | ❌ No | Enable via channel variable |
+| **Partial Results Stabilization** | ✅ Enabled | ❌ No | Can be disabled if needed |
+| **Auto Punctuation** | ✅ Always On | ❌ No | Cannot be disabled |
+| **Word Confidence Scores** | ✅ Always Included | ❌ No | Part of standard response |
+| **Content Moderation** | ❌ Disabled | ⚠️ Yes | Requires vocabulary filter in AWS |
+| **Custom Vocabulary** | ❌ Disabled | ⚠️ Yes | Requires vocabulary in AWS |
+| **Speaker Diarization** | ❌ Disabled | ❌ No | Enable via channel variable |
+
+### PII Redaction (Sensitive Data Protection)
+
+**Automatically redacts Personally Identifiable Information (PII) from transcripts for privacy and compliance.**
+
+**Enable PII Redaction:**
 
 ```xml
-<action application="set" data="AWS_VOCABULARY_NAME=my-custom-vocabulary"/>
+<!-- Redact all PII types (default) -->
+<action application="set" data="AWS_CONTENT_REDACTION_TYPE=PII"/>
+```
+
+**Redact specific PII types:**
+
+```xml
+<action application="set" data="AWS_CONTENT_REDACTION_TYPE=PII"/>
+<action application="set" data="AWS_PII_ENTITY_TYPES=CREDIT_DEBIT_NUMBER,SSN,NAME,PHONE"/>
+```
+
+**Supported PII Entity Types:**
+- `ALL` - All PII types (default)
+- `BANK_ACCOUNT_NUMBER` - Bank account numbers
+- `BANK_ROUTING` - Bank routing numbers
+- `CREDIT_DEBIT_NUMBER` - Credit/debit card numbers
+- `CREDIT_DEBIT_CVV` - Card CVV codes
+- `CREDIT_DEBIT_EXPIRY` - Card expiration dates
+- `PIN` - Personal identification numbers
+- `EMAIL` - Email addresses
+- `ADDRESS` - Physical addresses
+- `NAME` - Person names
+- `PHONE` - Phone numbers
+- `SSN` - Social security numbers
+
+**Example:** Protect payment information
+
+```xml
+<extension name="payment_call">
+  <condition field="destination_number" expression="^1000$">
+    <!-- Enable PII redaction for payment info -->
+    <action application="set" data="AWS_CONTENT_REDACTION_TYPE=PII"/>
+    <action application="set" data="AWS_PII_ENTITY_TYPES=CREDIT_DEBIT_NUMBER,CREDIT_DEBIT_CVV,CREDIT_DEBIT_EXPIRY,PIN"/>
+    <action application="set" data="AWS_SHOW_SPEAKER_LABEL=true"/>
+
+    <action application="answer"/>
+    <action application="inline" data="aws_transcribe ${uuid} start en-US interim"/>
+    <action application="playback" data="payment_prompt.wav"/>
+  </condition>
+</extension>
+```
+
+**Redacted output example:**
+```
+Original: "My credit card number is 4532-1234-5678-9010"
+Redacted: "My credit card number is [CREDIT_DEBIT_NUMBER]"
+```
+
+**Notes:**
+- PII redaction is performed by AWS in real-time
+- No additional AWS configuration required
+- Does NOT require external services
+- Enabled per-call via channel variables
+- Redaction happens before transcripts are returned
+
+### Partial Results Stabilization
+
+**Improves the quality and consistency of interim (partial) results.**
+
+**Status:** ✅ **ENABLED BY DEFAULT**
+
+This feature is automatically enabled for better interim transcription accuracy. It reduces "flipping" where interim results change significantly between updates.
+
+**To disable (not recommended):**
+
+```xml
+<action application="set" data="AWS_ENABLE_PARTIAL_RESULTS_STABILIZATION=false"/>
+```
+
+**Benefits:**
+- More stable interim results
+- Less text "flipping" during real-time transcription
+- Better user experience for live transcription displays
+- No additional cost
+
+**Notes:**
+- Enabled by default - no configuration needed
+- Only affects interim results, not final results
+- Does NOT require external configuration
+- Improves real-time transcription quality
+
+### Content Moderation (Vocabulary Filtering)
+
+**Filters inappropriate content or specific words from transcripts.**
+
+**Requires:** AWS Vocabulary Filter created in AWS Console
+
+**How to create a vocabulary filter:**
+
+1. Go to AWS Console → Amazon Transcribe → Vocabulary filtering
+2. Click "Create vocabulary filter"
+3. Enter filter name (e.g., `profanity-filter`)
+4. Choose language
+5. Add words to filter (one per line)
+6. Save filter
+
+**Use in FreeSWITCH:**
+
+```xml
+<!-- Mask filtered words with [***] -->
 <action application="set" data="AWS_VOCABULARY_FILTER_NAME=profanity-filter"/>
 <action application="set" data="AWS_VOCABULARY_FILTER_METHOD=mask"/>
 ```
+
+**Filter Methods:**
+- `mask` - Replace filtered words with `[***]` (recommended)
+- `remove` - Remove filtered words entirely
+- `tag` - Keep words but tag them in output
+
+**Example:**
+
+```xml
+<extension name="customer_service">
+  <condition field="destination_number" expression="^8000$">
+    <!-- Enable profanity filter -->
+    <action application="set" data="AWS_VOCABULARY_FILTER_NAME=profanity-filter"/>
+    <action application="set" data="AWS_VOCABULARY_FILTER_METHOD=mask"/>
+
+    <action application="answer"/>
+    <action application="inline" data="aws_transcribe ${uuid} start en-US interim"/>
+  </condition>
+</extension>
+```
+
+**Notes:**
+- ⚠️ **Requires external AWS configuration** (must create vocabulary filter in AWS Console)
+- Filter must be created in the same region as transcription
+- Can filter profanity, competitor names, or any custom words
+- Enabled per-call via channel variables
+
+### Automatic Punctuation and Capitalization
+
+**Status:** ✅ **ALWAYS ENABLED**
+
+AWS Transcribe Streaming automatically adds punctuation and capitalization to transcripts. This feature is built-in and cannot be disabled.
+
+**Benefits:**
+- Professional, readable transcripts
+- No manual editing needed
+- Proper sentence structure
+- Correct capitalization
+
+**Example output:**
+```
+"Hello, my name is John. How can I help you today?"
+```
+
+**Notes:**
+- Always enabled - no configuration needed
+- Works with all languages supported by AWS Transcribe
+- Does NOT require external configuration
+- Included at no additional cost
+
+### Word-Level Confidence Scores
+
+**Status:** ✅ **ALWAYS INCLUDED**
+
+AWS Transcribe includes confidence scores for each word in the transcript, helping you evaluate accuracy.
+
+**Access confidence scores:**
+
+Confidence scores are included in the raw AWS Transcribe response. Parse the JSON response to extract them:
+
+```javascript
+// Example: Processing transcription event
+endpoint.on('aws_transcribe::transcription', (evt) => {
+  const results = JSON.parse(evt.body);
+
+  results.forEach(result => {
+    if (result.alternatives && result.alternatives[0].items) {
+      result.alternatives[0].items.forEach(item => {
+        console.log(`Word: ${item.content}`);
+        console.log(`Confidence: ${item.confidence}`);
+        console.log(`Type: ${item.type}`); // pronunciation or punctuation
+      });
+    }
+  });
+});
+```
+
+**Confidence score range:** 0.0 to 1.0
+- 0.9 - 1.0: High confidence
+- 0.7 - 0.9: Medium confidence
+- 0.0 - 0.7: Low confidence
+
+**Use cases:**
+- Quality assurance
+- Identifying sections needing review
+- Training custom vocabularies
+- Analytics and reporting
+
+**Notes:**
+- Always included - no configuration needed
+- Part of standard AWS Transcribe response
+- Does NOT require external configuration
+- Available for all transcription results
+
+### Custom Vocabulary (Domain-Specific Terms)
+
+**Improve accuracy for industry-specific terms, product names, or acronyms.**
+
+**Requires:** AWS Custom Vocabulary created in AWS Console
+
+**How to create a custom vocabulary:**
+
+1. Go to AWS Console → Amazon Transcribe → Custom vocabulary
+2. Click "Create vocabulary"
+3. Enter vocabulary name (e.g., `medical-terms`)
+4. Choose language
+5. Add terms in one of these formats:
+   - Text file with phrases
+   - Table format (Phrase, IPA, SoundsLike, DisplayAs)
+6. Save and wait for processing
+
+**Use in FreeSWITCH:**
+
+```xml
+<action application="set" data="AWS_VOCABULARY_NAME=medical-terms"/>
+```
+
+**Example:**
+
+```xml
+<extension name="medical_transcription">
+  <condition field="destination_number" expression="^9000$">
+    <!-- Use medical vocabulary -->
+    <action application="set" data="AWS_VOCABULARY_NAME=medical-terms"/>
+    <action application="set" data="AWS_SHOW_SPEAKER_LABEL=true"/>
+
+    <action application="answer"/>
+    <action application="inline" data="aws_transcribe ${uuid} start en-US interim"/>
+  </condition>
+</extension>
+```
+
+**Notes:**
+- ⚠️ **Requires external AWS configuration** (must create vocabulary in AWS Console)
+- Vocabulary must be in "Ready" state before use
+- Can contain up to 256,000 entries
+- Improves recognition of specified terms
 
 ### Audio Formats
 
