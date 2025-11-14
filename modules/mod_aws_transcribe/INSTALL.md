@@ -178,8 +178,10 @@ echo "applications/mod_aws_transcribe" | sudo tee -a modules.conf
 make mod_aws_transcribe
 sudo make mod_aws_transcribe-install
 
-# Verify installation
-ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+# Verify installation (check the actual install location)
+ls -la /usr/local/freeswitch/mod/mod_aws_transcribe.so
+# OR if FreeSWITCH was installed from packages:
+# ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
 ```
 
 ### Method B: Standalone Build with Direct Compilation
@@ -233,14 +235,18 @@ g++ -shared -o mod_aws_transcribe.so \
     -laws-crt-cpp \
     -lpthread -lcurl -lcrypto -lssl -lz
 
-# Install module
-sudo cp mod_aws_transcribe.so /usr/lib/freeswitch/mod/
+# Install module (adjust path based on your FreeSWITCH installation)
+# If FreeSWITCH is in /usr/local/freeswitch:
+sudo cp mod_aws_transcribe.so /usr/local/freeswitch/mod/
+# OR if FreeSWITCH is in /usr/lib (installed from packages):
+# sudo cp mod_aws_transcribe.so /usr/lib/freeswitch/mod/
 
 # Update library cache
 sudo ldconfig
 
 # Verify installation
-ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+ls -la /usr/local/freeswitch/mod/mod_aws_transcribe.so
+# OR: ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
 ```
 
 ---
