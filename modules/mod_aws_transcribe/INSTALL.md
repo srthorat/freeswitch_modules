@@ -146,31 +146,101 @@ sudo make install
 
 ## Build mod_aws_transcribe
 
+There are two methods to build this module:
+
+### Method A: Build Within FreeSWITCH Source Tree (Recommended)
+
+This method integrates the module with FreeSWITCH's build system.
+
+```bash
+# Set FreeSWITCH source directory
+export FS_SRC_DIR=/usr/src/freeswitch
+
+# Clone the module repository
+cd /usr/src
+git clone https://github.com/srthorat/freeswitch_modules.git
+
+# Checkout the Pusher integration branch
+cd freeswitch_modules
+git checkout claude/pusher-integration-011CV5rDARmbG2qx8jdzGpq9
+
+# Copy module to FreeSWITCH source tree
+sudo cp -r modules/mod_aws_transcribe ${FS_SRC_DIR}/src/mod/applications/
+
+# Navigate to FreeSWITCH source directory
+cd ${FS_SRC_DIR}
+
+# Add module to build configuration
+echo "applications/mod_aws_transcribe" | sudo tee -a modules.conf
+
+# Reconfigure and build
+./configure
+make mod_aws_transcribe
+sudo make mod_aws_transcribe-install
+
+# Verify installation
+ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+```
+
+### Method B: Standalone Build with Direct Compilation
+
+This method compiles the module directly without autotools.
+
 ```bash
 # Clone the repository
 cd /usr/src
 git clone https://github.com/srthorat/freeswitch_modules.git
-cd freeswitch_modules/modules/mod_aws_transcribe
+cd freeswitch_modules
 
-# Set FreeSWITCH source directory if not already set
+# Checkout the Pusher integration branch
+git checkout claude/pusher-integration-011CV5rDARmbG2qx8jdzGpq9
+
+# Navigate to module directory
+cd modules/mod_aws_transcribe
+
+# Set FreeSWITCH and AWS SDK paths
 export FS_SRC_DIR=/usr/src/freeswitch
+export AWS_SDK_DIR=${FS_SRC_DIR}/libs/aws-sdk-cpp
 
-# Generate build files
-aclocal
-autoconf
-automake --add-missing
+# Compile C source
+gcc -fPIC -c mod_aws_transcribe.c \
+    -I${FS_SRC_DIR}/src/include \
+    -I${FS_SRC_DIR}/libs/apr/include \
+    -I${FS_SRC_DIR}/libs/apr-util/include \
+    -o mod_aws_transcribe.o
 
-# Configure
-./configure --with-freeswitch-src=${FS_SRC_DIR}
+# Compile C++ source
+g++ -fPIC -std=c++11 -c aws_transcribe_glue.cpp \
+    -I${FS_SRC_DIR}/src/include \
+    -I${FS_SRC_DIR}/libs/apr/include \
+    -I${FS_SRC_DIR}/libs/apr-util/include \
+    -I${AWS_SDK_DIR}/aws-cpp-sdk-core/include \
+    -I${AWS_SDK_DIR}/aws-cpp-sdk-transcribestreaming/include \
+    -I${AWS_SDK_DIR}/build/.deps/install/include \
+    -o aws_transcribe_glue.o
 
-# Build
-make
+# Link into shared library
+g++ -shared -o mod_aws_transcribe.so \
+    mod_aws_transcribe.o aws_transcribe_glue.o \
+    -L${AWS_SDK_DIR}/build/.deps/install/lib \
+    -L${AWS_SDK_DIR}/build/aws-cpp-sdk-core \
+    -L${AWS_SDK_DIR}/build/aws-cpp-sdk-transcribestreaming \
+    -laws-cpp-sdk-transcribestreaming \
+    -laws-cpp-sdk-core \
+    -laws-c-event-stream \
+    -laws-checksums \
+    -laws-c-common \
+    -laws-crt-cpp \
+    -lpthread -lcurl -lcrypto -lssl -lz
 
-# Install
-sudo make install
+# Install module
+sudo cp mod_aws_transcribe.so /usr/lib/freeswitch/mod/
 
-# The module will be installed to:
-# /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+# Update library cache
+sudo ldconfig
+
+# Verify installation
+ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
 ```
 
 ---
