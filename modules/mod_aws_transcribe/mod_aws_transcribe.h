@@ -49,6 +49,7 @@ struct cap_cb {
 
 	switch_vad_t * vad;
 	uint32_t samples_per_second;
+	struct speaker_meta speakers;
 };
 
 #endif

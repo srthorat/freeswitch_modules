@@ -131,33 +131,13 @@ public:
 				// Default to ALL PII entity types if not specified
 				const char* pii_types = switch_channel_get_variable(channel, "AWS_PII_ENTITY_TYPES");
 				if (pii_types) {
-					// Parse comma-separated PII entity types
+					// Use comma-separated PII entity types string directly
 					// Supported: ALL, BANK_ACCOUNT_NUMBER, BANK_ROUTING, CREDIT_DEBIT_NUMBER, CREDIT_DEBIT_CVV,
 					//            CREDIT_DEBIT_EXPIRY, PIN, EMAIL, ADDRESS, NAME, PHONE, SSN
-					Aws::Vector<PiiEntityType> entityTypes;
-					char* types_copy = strdup(pii_types);
-					char* token = strtok(types_copy, ",");
-					while (token) {
-						// Trim whitespace
-						while (*token == ' ') token++;
-						char* end = token + strlen(token) - 1;
-						while (end > token && *end == ' ') end--;
-						*(end + 1) = '\0';
-
-						PiiEntityType entityType = PiiEntityTypeMapper::GetPiiEntityTypeForName(token);
-						if (entityType != PiiEntityType::NOT_SET) {
-							entityTypes.push_back(entityType);
-						}
-						token = strtok(NULL, ",");
-					}
-					free(types_copy);
-
-					if (!entityTypes.empty()) {
-						m_request.SetPiiEntityTypes(entityTypes);
-					}
+					m_request.SetPiiEntityTypes(pii_types);
 				} else {
 					// Default: redact all PII types
-					m_request.SetPiiEntityTypes({PiiEntityType::ALL});
+					m_request.SetPiiEntityTypes("ALL");
 				}
 			}
 		}
@@ -649,7 +629,7 @@ extern "C" {
 							if (state == SWITCH_VAD_STATE_START_TALKING) {
 								switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "detected speech, connect to aws speech now\n");
 								streamer->connect();
-								cb->responseHandler(session, "vad_detected", cb->bugname);
+								cb->responseHandler(session, "vad_detected", cb->bugname, &cb->speakers);
 							}
 						}
 
