@@ -5,6 +5,7 @@
  */
 #include "mod_aws_transcribe.h"
 #include "aws_transcribe_glue.h"
+#include "pusher_glue.h"
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_shutdown);
@@ -52,7 +53,121 @@ static void responseHandler(switch_core_session_t* session, const char * json, c
     }
     if (!error) {
     		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_RESULTS);
-				// Note: Speaker metadata is available in the 'speakers' parameter for custom processing
+
+				// Send to Pusher with speaker name mapping
+				if (speakers && speakers->count > 0) {
+					cJSON* jTranscript = cJSON_Parse(json);
+					if (jTranscript && cJSON_IsArray(jTranscript)) {
+						cJSON* enrichedPayload = cJSON_CreateObject();
+						cJSON_AddStringToObject(enrichedPayload, "session_id", uuid);
+						cJSON_AddStringToObject(enrichedPayload, "timestamp", ""); // Will be set by Pusher service
+
+						cJSON* segments = cJSON_CreateArray();
+
+						// Process each result
+						cJSON* result = NULL;
+						cJSON_ArrayForEach(result, jTranscript) {
+							cJSON* is_final = cJSON_GetObjectItem(result, "is_final");
+							cJSON* alternatives = cJSON_GetObjectItem(result, "alternatives");
+
+							if (alternatives && cJSON_IsArray(alternatives)) {
+								cJSON* alternative = cJSON_GetArrayItem(alternatives, 0);
+								cJSON* items = cJSON_GetObjectItem(alternative, "items");
+
+								if (items && cJSON_IsArray(items)) {
+									// Group by speaker
+									cJSON* item = NULL;
+									const char* current_speaker = NULL;
+									cJSON* current_words = cJSON_CreateArray();
+
+									cJSON_ArrayForEach(item, items) {
+										cJSON* speaker_label = cJSON_GetObjectItem(item, "speaker_label");
+										cJSON* content = cJSON_GetObjectItem(item, "content");
+
+										if (speaker_label && content) {
+											const char* label = cJSON_GetStringValue(speaker_label);
+
+											if (current_speaker && strcmp(current_speaker, label) != 0) {
+												// Speaker changed, create segment
+												cJSON* segment = cJSON_CreateObject();
+
+												// Map speaker label to name
+												int speaker_idx = -1;
+												sscanf(current_speaker, "spk_%d", &speaker_idx);
+												const char* speaker_name = "Unknown Speaker";
+												if (speaker_idx >= 0 && speaker_idx < speakers->count) {
+													speaker_name = speakers->names[speaker_idx];
+												}
+
+												cJSON_AddStringToObject(segment, "speaker_name", speaker_name);
+												cJSON_AddStringToObject(segment, "speaker_label", current_speaker);
+
+												// Build text from words
+												cJSON* word = NULL;
+												char text[4096] = "";
+												int first = 1;
+												cJSON_ArrayForEach(word, current_words) {
+													if (!first) strcat(text, " ");
+													strcat(text, cJSON_GetStringValue(word));
+													first = 0;
+												}
+												cJSON_AddStringToObject(segment, "text", text);
+												cJSON_AddItemToArray(segments, segment);
+
+												cJSON_Delete(current_words);
+												current_words = cJSON_CreateArray();
+											}
+
+											current_speaker = label;
+											cJSON_AddItemToArray(current_words, cJSON_CreateString(cJSON_GetStringValue(content)));
+										}
+									}
+
+									// Add last segment
+									if (current_speaker && cJSON_GetArraySize(current_words) > 0) {
+										cJSON* segment = cJSON_CreateObject();
+
+										int speaker_idx = -1;
+										sscanf(current_speaker, "spk_%d", &speaker_idx);
+										const char* speaker_name = "Unknown Speaker";
+										if (speaker_idx >= 0 && speaker_idx < speakers->count) {
+											speaker_name = speakers->names[speaker_idx];
+										}
+
+										cJSON_AddStringToObject(segment, "speaker_name", speaker_name);
+										cJSON_AddStringToObject(segment, "speaker_label", current_speaker);
+
+										char text[4096] = "";
+										int first = 1;
+										cJSON* word = NULL;
+										cJSON_ArrayForEach(word, current_words) {
+											if (!first) strcat(text, " ");
+											strcat(text, cJSON_GetStringValue(word));
+											first = 0;
+										}
+										cJSON_AddStringToObject(segment, "text", text);
+										cJSON_AddItemToArray(segments, segment);
+									}
+
+									cJSON_Delete(current_words);
+								}
+							}
+
+							cJSON_AddBoolToObject(enrichedPayload, "is_final", cJSON_IsTrue(is_final));
+						}
+
+						cJSON_AddItemToObject(enrichedPayload, "segments", segments);
+
+						char* pusher_json = cJSON_PrintUnformatted(enrichedPayload);
+						pusher_send_transcript(uuid, pusher_json);
+						free(pusher_json);
+						cJSON_Delete(enrichedPayload);
+					}
+					if (jTranscript) cJSON_Delete(jTranscript);
+				} else {
+					// No speaker metadata, send raw transcript to Pusher
+					pusher_send_transcript(uuid, json);
+				}
     }
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "json payload: %s.\n", json);
 		switch_channel_event_set_data(channel, event);
@@ -256,6 +371,9 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_load)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Failed initializing aws speech interface\n");
 	}
 
+	// Initialize Pusher integration
+	pusher_init();
+
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "AWS Speech Transcription API successfully loaded\n");
 
 	SWITCH_ADD_API(api_interface, "uuid_aws_transcribe", "AWS Speech Transcription API", aws_transcribe_function, TRANSCRIBE_API_SYNTAX);
@@ -272,6 +390,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_load)
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_shutdown)
 {
 	aws_transcribe_cleanup();
+	pusher_cleanup();
 	switch_event_free_subclass(TRANSCRIBE_EVENT_RESULTS);
 	return SWITCH_STATUS_SUCCESS;
 }

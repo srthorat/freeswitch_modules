@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FreeSWITCH Dialplan for Automatic Transcription
+
+  Place this file in: /etc/freeswitch/dialplan/default/01_transcribe.xml
+
+  This dialplan:
+  - Handles local extensions (1000-1099)
+  - Automatically starts AWS Transcribe with speaker diarization
+  - Maps Caller to Speaker 0, Callee to Speaker 1
+  - Sends real-time transcripts to Pusher channel transcription-{uuid}
+-->
+<include>
+
+  <!--
+    Local Extension with Automatic Transcription
+    Matches extensions 1000-1099
+  -->
+  <extension name="local_extension_with_transcription">
+    <condition field="destination_number" expression="^(10[0-9]{2})$">
+
+      <!-- ==================== STEP 1: Get Caller Information ==================== -->
+
+      <!-- Store caller ID information -->
+      <action application="set" data="caller_id_number=${caller_id_number}"/>
+      <action application="set" data="caller_id_name=${caller_id_name}"/>
+      <action application="set" data="callee_id_number=${destination_number}"/>
+
+      <!-- Retrieve callee name from user directory -->
+      <action application="set" data="callee_id_name=${user_data(${destination_number}@${domain_name} var effective_caller_id_name)}"/>
+
+      <!-- Fallback if callee name not found in directory -->
+      <action application="set" data="callee_id_name=${callee_id_name:-Extension ${destination_number}}"/>
+
+      <!-- Log call initiation -->
+      <action application="log" data="INFO ===================================================="/>
+      <action application="log" data="INFO Starting transcribed call"/>
+      <action application="log" data="INFO Caller: ${caller_id_name} &lt;${caller_id_number}&gt;"/>
+      <action application="log" data="INFO Callee: ${callee_id_name} &lt;${callee_id_number}&gt;"/>
+      <action application="log" data="INFO Call UUID: ${uuid}"/>
+      <action application="log" data="INFO Pusher Channel: transcription-${uuid}"/>
+      <action application="log" data="INFO ===================================================="/>
+
+      <!-- ==================== STEP 2: Export Variables to B-leg ==================== -->
+
+      <!-- These variables will be available on both A-leg and B-leg -->
+      <action application="export" data="transcription_enabled=true"/>
+      <action application="export" data="caller_id_number=${caller_id_number}"/>
+      <action application="export" data="caller_id_name=${caller_id_name}"/>
+      <action application="export" data="callee_id_number=${callee_id_number}"/>
+      <action application="export" data="callee_id_name=${callee_id_name}"/>
+      <action application="export" data="transcription_uuid=${uuid}"/>
+      <action application="export" data="transcription_channel=transcription-${uuid}"/>
+
+      <!-- ==================== STEP 3: Build Speaker Metadata ==================== -->
+
+      <!--
+        Speaker mapping for stereo audio:
+        - Array index 0 = Caller (left channel) → spk_0
+        - Array index 1 = Callee (right channel) → spk_1
+      -->
+      <action application="set"><![CDATA[data="speaker_meta={\"speakers\":[\"Caller: ${caller_id_name} (${caller_id_number})\",\"Callee: ${callee_id_name} (${callee_id_number})\"]}"]]></action>
+
+      <!-- ==================== STEP 4: Configure Audio ==================== -->
+
+      <!-- Set codec for better audio quality -->
+      <action application="set" data="absolute_codec_string=PCMU,PCMA,G722"/>
+
+      <!-- Enable recording if needed (optional) -->
+      <!-- <action application="set" data="RECORD_STEREO=true"/> -->
+      <!-- <action application="record_session" data="/tmp/recordings/${uuid}.wav"/> -->
+
+      <!-- ==================== STEP 5: Start Transcription on Answer ==================== -->
+
+      <!--
+        Execute transcription when call is answered
+        API format: aws_transcribe <uuid> start <lang> [interim] [stereo] [bugname] [metadata]
+        - uuid: Call UUID
+        - start: Start command
+        - en-US: Language code
+        - interim: Show interim + final results
+        - stereo: Enable stereo with speaker diarization
+        - transcribe_bug: Bug name (for stopping later)
+        - speaker_meta: JSON with speaker names
+      -->
+      <action application="export" data="nolocal:execute_on_answer=aws_transcribe ${uuid} start en-US interim stereo transcribe_bug ${speaker_meta}"/>
+
+      <!-- Alternative: Stop transcription on hangup -->
+      <action application="export" data="nolocal:execute_on_hangup=aws_transcribe ${uuid} stop"/>
+
+      <!-- ==================== STEP 6: Bridge the Call ==================== -->
+
+      <!-- Bridge to destination user -->
+      <action application="bridge" data="user/${destination_number}@${domain_name}"/>
+
+      <!-- ==================== STEP 7: Hangup Handling ==================== -->
+
+      <!-- If bridge fails, hangup -->
+      <action application="hangup"/>
+
+    </condition>
+  </extension>
+
+</include>

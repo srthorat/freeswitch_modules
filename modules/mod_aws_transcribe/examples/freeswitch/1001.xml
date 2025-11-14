@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  User 1001 - Jane Smith
+
+  Place this file in: /etc/freeswitch/directory/default/1001.xml
+
+  This user configuration:
+  - Sets up extension 1001
+  - Defines user as "Jane Smith"
+  - Used for speaker identification in transcriptions
+-->
+<include>
+  <user id="1001">
+    <params>
+      <param name="password" value="1234"/>
+      <param name="vm-password" value="1001"/>
+    </params>
+    <variables>
+      <!-- General Settings -->
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="1001"/>
+      <variable name="user_context" value="default"/>
+
+      <!-- Caller ID - Used for transcription speaker names -->
+      <variable name="effective_caller_id_name" value="Jane Smith"/>
+      <variable name="effective_caller_id_number" value="1001"/>
+      <variable name="outbound_caller_id_name" value="Jane Smith"/>
+      <variable name="outbound_caller_id_number" value="1001"/>
+
+      <!-- Optional: Additional metadata for transcription -->
+      <variable name="user_department" value="Support"/>
+      <variable name="user_location" value="Los Angeles"/>
+    </variables>
+  </user>
+</include>

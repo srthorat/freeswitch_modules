@@ -1,0 +1,74 @@
+[Unit]
+Description=FreeSWITCH
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=/run/freeswitch/freeswitch.pid
+Environment="DAEMON_OPTS=-nonat"
+
+# ============================================================================
+# AWS Transcribe Configuration
+# ============================================================================
+# Replace with your actual AWS credentials
+Environment="AWS_ACCESS_KEY_ID=AKIAXXXXXXXXXXXXXXXX"
+Environment="AWS_SECRET_ACCESS_KEY=your-secret-access-key-here"
+Environment="AWS_REGION=us-east-1"
+
+# Optional: AWS Session Token (for temporary credentials)
+# Environment="AWS_SESSION_TOKEN=your-session-token"
+
+# ============================================================================
+# Pusher REST API Configuration (Optional)
+# ============================================================================
+# Replace with your actual Pusher credentials from:
+# https://dashboard.pusher.com/ → Your App → App Keys
+Environment="PUSHER_APP_ID=1234567"
+Environment="PUSHER_KEY=your-pusher-app-key"
+Environment="PUSHER_SECRET=your-pusher-app-secret"
+Environment="PUSHER_CLUSTER=us2"
+
+# Available clusters:
+# - us2 (US East)
+# - us3 (US West)
+# - eu (Europe)
+# - ap1 (Asia Pacific Singapore)
+# - ap2 (Asia Pacific Mumbai)
+# - ap3 (Asia Pacific Tokyo)
+# - ap4 (Asia Pacific Sydney)
+
+# ============================================================================
+# FreeSWITCH Service Configuration
+# ============================================================================
+ExecStart=/usr/bin/freeswitch -u freeswitch -g freeswitch -ncwait $DAEMON_OPTS
+TimeoutSec=45s
+Restart=always
+
+# Working directory
+WorkingDirectory=/usr/share/freeswitch
+
+# User and group
+User=freeswitch
+Group=freeswitch
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Limits
+LimitNOFILE=1000000
+LimitNPROC=60000
+LimitSTACK=250000
+LimitRTPRIO=infinity
+LimitRTTIME=7000000
+IOSchedulingClass=realtime
+IOSchedulingPriority=2
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=89
+
+[Install]
+WantedBy=multi-user.target

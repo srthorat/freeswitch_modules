@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Call Transcription - Pusher Example</title>
+
+    <!-- Pusher JavaScript Library -->
+    <script src="https://js.pusher.com/8.0/pusher.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .config-section {
+            padding: 30px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .config-section h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 20px 30px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #eee;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-badge.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .transcription-section {
+            padding: 30px;
+            min-height: 400px;
+        }
+
+        .transcription-section h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .transcript-item {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        .transcript-item.interim {
+            border-left-color: #ccc;
+            background: #fafafa;
+            font-style: italic;
+            opacity: 0.7;
+        }
+
+        .transcript-speaker {
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .transcript-text {
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .transcript-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .call-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .info-card {
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 4px;
+        }
+
+        .info-card h3 {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .info-card p {
+            font-size: 16px;
+            color: #333;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Live Call Transcription</h1>
+            <p>Real-time AWS Transcribe with Pusher Integration</p>
+        </div>
+
+        <!-- Configuration Section -->
+        <div class="config-section">
+            <h2>Configuration</h2>
+
+            <div class="form-group">
+                <label for="pusherKey">Pusher Key</label>
+                <input type="text" id="pusherKey" placeholder="Enter your Pusher key">
+            </div>
+
+            <div class="form-group">
+                <label for="pusherCluster">Pusher Cluster</label>
+                <input type="text" id="pusherCluster" placeholder="e.g., us2, eu, ap1" value="us2">
+            </div>
+
+            <div class="form-group">
+                <label for="callUuid">Call UUID</label>
+                <input type="text" id="callUuid" placeholder="Enter FreeSWITCH call UUID">
+            </div>
+
+            <button class="btn" id="connectBtn">Connect to Transcription</button>
+        </div>
+
+        <!-- Status Section -->
+        <div class="status">
+            <span id="statusBadge" class="status-badge disconnected">Disconnected</span>
+            <span id="statusText" style="margin-left: 10px; color: #666;">Not connected</span>
+        </div>
+
+        <!-- Call Information -->
+        <div id="callInfoSection" style="padding: 20px 30px; display: none;">
+            <div class="call-info">
+                <div class="info-card">
+                    <h3>Call UUID</h3>
+                    <p id="infoUuid">-</p>
+                </div>
+                <div class="info-card">
+                    <h3>Pusher Channel</h3>
+                    <p id="infoChannel">-</p>
+                </div>
+                <div class="info-card">
+                    <h3>Messages Received</h3>
+                    <p id="infoCount">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcription Section -->
+        <div class="transcription-section">
+            <h2>Transcription</h2>
+            <div id="transcriptionContainer">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="M12 19l-7 7v-7H3a1 1 0 01-1-1V4a1 1 0 011-1h18a1 1 0 011 1v14a1 1 0 01-1 1h-2v7l-7-7z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <p>No transcriptions yet. Configure and connect to start.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let pusher = null;
+        let channel = null;
+        let messageCount = 0;
+
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const pusherKeyInput = document.getElementById('pusherKey');
+        const pusherClusterInput = document.getElementById('pusherCluster');
+        const callUuidInput = document.getElementById('callUuid');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusText = document.getElementById('statusText');
+        const transcriptionContainer = document.getElementById('transcriptionContainer');
+        const callInfoSection = document.getElementById('callInfoSection');
+
+        // Load saved configuration from localStorage
+        window.addEventListener('DOMContentLoaded', function() {
+            const savedKey = localStorage.getItem('pusherKey');
+            const savedCluster = localStorage.getItem('pusherCluster');
+
+            if (savedKey) pusherKeyInput.value = savedKey;
+            if (savedCluster) pusherClusterInput.value = savedCluster;
+        });
+
+        // Connect button click handler
+        connectBtn.addEventListener('click', function() {
+            const pusherKey = pusherKeyInput.value.trim();
+            const pusherCluster = pusherClusterInput.value.trim();
+            const callUuid = callUuidInput.value.trim();
+
+            // Validation
+            if (!pusherKey) {
+                alert('Please enter your Pusher key');
+                return;
+            }
+
+            if (!pusherCluster) {
+                alert('Please enter your Pusher cluster');
+                return;
+            }
+
+            if (!callUuid) {
+                alert('Please enter the call UUID');
+                return;
+            }
+
+            // Save configuration
+            localStorage.setItem('pusherKey', pusherKey);
+            localStorage.setItem('pusherCluster', pusherCluster);
+
+            // Connect to Pusher
+            connectToPusher(pusherKey, pusherCluster, callUuid);
+        });
+
+        function connectToPusher(key, cluster, uuid) {
+            // Disconnect existing connection
+            if (pusher) {
+                pusher.disconnect();
+            }
+
+            // Clear transcription
+            transcriptionContainer.innerHTML = '';
+            messageCount = 0;
+
+            // Initialize Pusher
+            console.log('Initializing Pusher with key:', key, 'cluster:', cluster);
+
+            pusher = new Pusher(key, {
+                cluster: cluster,
+                forceTLS: true
+            });
+
+            // Connection state handlers
+            pusher.connection.bind('connected', function() {
+                console.log('Connected to Pusher');
+                updateStatus('connected', 'Connected to Pusher');
+            });
+
+            pusher.connection.bind('disconnected', function() {
+                console.log('Disconnected from Pusher');
+                updateStatus('disconnected', 'Disconnected from Pusher');
+            });
+
+            pusher.connection.bind('error', function(err) {
+                console.error('Pusher connection error:', err);
+                updateStatus('disconnected', 'Connection error: ' + (err.message || 'Unknown error'));
+                alert('Pusher connection error: ' + (err.error?.data?.message || err.message || 'Unknown error'));
+            });
+
+            // Subscribe to transcription channel
+            const channelName = 'transcription-' + uuid;
+            console.log('Subscribing to channel:', channelName);
+
+            channel = pusher.subscribe(channelName);
+
+            // Channel subscription handlers
+            channel.bind('pusher:subscription_succeeded', function() {
+                console.log('Successfully subscribed to channel:', channelName);
+                updateStatus('connected', 'Listening for transcriptions on ' + channelName);
+
+                // Show call info
+                callInfoSection.style.display = 'block';
+                document.getElementById('infoUuid').textContent = uuid;
+                document.getElementById('infoChannel').textContent = channelName;
+                document.getElementById('infoCount').textContent = messageCount;
+
+                // Disable inputs
+                connectBtn.textContent = 'Connected';
+                connectBtn.disabled = true;
+            });
+
+            channel.bind('pusher:subscription_error', function(status) {
+                console.error('Subscription error:', status);
+                updateStatus('disconnected', 'Subscription error');
+                alert('Failed to subscribe to channel. Please check your configuration.');
+            });
+
+            // Bind to transcript event
+            channel.bind('transcript', function(data) {
+                console.log('Received transcript:', data);
+                messageCount++;
+                document.getElementById('infoCount').textContent = messageCount;
+
+                // Display transcript
+                displayTranscript(data);
+            });
+        }
+
+        function displayTranscript(data) {
+            // Remove empty state if present
+            const emptyState = transcriptionContainer.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            // Check if we have segments (speaker diarization)
+            if (data.segments && data.segments.length > 0) {
+                // Display each segment
+                data.segments.forEach(segment => {
+                    addTranscriptItem(
+                        segment.speaker_name || segment.speaker_label,
+                        segment.text,
+                        data.is_final,
+                        segment.start_time,
+                        segment.end_time
+                    );
+                });
+            } else if (data.transcript) {
+                // Display simple transcript
+                addTranscriptItem(
+                    'Speaker',
+                    data.transcript,
+                    data.is_final,
+                    null,
+                    null
+                );
+            }
+
+            // Auto-scroll to bottom
+            transcriptionContainer.scrollTop = transcriptionContainer.scrollHeight;
+        }
+
+        function addTranscriptItem(speaker, text, isFinal, startTime, endTime) {
+            const item = document.createElement('div');
+            item.className = 'transcript-item' + (isFinal ? '' : ' interim');
+
+            const speakerEl = document.createElement('div');
+            speakerEl.className = 'transcript-speaker';
+            speakerEl.textContent = speaker;
+
+            const textEl = document.createElement('div');
+            textEl.className = 'transcript-text';
+            textEl.textContent = text;
+
+            const timeEl = document.createElement('div');
+            timeEl.className = 'transcript-time';
+
+            let timeText = isFinal ? 'Final' : 'Interim';
+            if (startTime !== null && endTime !== null) {
+                timeText += ` • ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s`;
+            }
+            timeEl.textContent = timeText + ' • ' + new Date().toLocaleTimeString();
+
+            item.appendChild(speakerEl);
+            item.appendChild(textEl);
+            item.appendChild(timeEl);
+
+            transcriptionContainer.appendChild(item);
+        }
+
+        function updateStatus(status, text) {
+            statusBadge.className = 'status-badge ' + status;
+            statusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            statusText.textContent = text;
+        }
+
+        // Example: Auto-connect with URL parameters
+        // Usage: index.html?key=YOUR_KEY&cluster=us2&uuid=abc-123-def-456
+        window.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const key = urlParams.get('key');
+            const cluster = urlParams.get('cluster');
+            const uuid = urlParams.get('uuid');
+
+            if (key && cluster && uuid) {
+                pusherKeyInput.value = key;
+                pusherClusterInput.value = cluster;
+                callUuidInput.value = uuid;
+
+                // Auto-connect after 1 second
+                setTimeout(function() {
+                    connectBtn.click();
+                }, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

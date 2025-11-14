@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  User 1000 - John Doe
+
+  Place this file in: /etc/freeswitch/directory/default/1000.xml
+
+  This user configuration:
+  - Sets up extension 1000
+  - Defines user as "John Doe"
+  - Used for speaker identification in transcriptions
+-->
+<include>
+  <user id="1000">
+    <params>
+      <param name="password" value="1234"/>
+      <param name="vm-password" value="1000"/>
+    </params>
+    <variables>
+      <!-- General Settings -->
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="1000"/>
+      <variable name="user_context" value="default"/>
+
+      <!-- Caller ID - Used for transcription speaker names -->
+      <variable name="effective_caller_id_name" value="John Doe"/>
+      <variable name="effective_caller_id_number" value="1000"/>
+      <variable name="outbound_caller_id_name" value="John Doe"/>
+      <variable name="outbound_caller_id_number" value="1000"/>
+
+      <!-- Optional: Additional metadata for transcription -->
+      <variable name="user_department" value="Sales"/>
+      <variable name="user_location" value="New York"/>
+    </variables>
+  </user>
+</include>
