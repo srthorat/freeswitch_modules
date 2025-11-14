@@ -1,54 +1,774 @@
 # mod_aws_transcribe - AWS Speaker Diarization Support
 
-This branch adds speaker diarization support to mod_aws_transcribe using AWS Transcribe's native speaker identification feature.
+Complete installation guide for adding speaker diarization support to mod_aws_transcribe using AWS Transcribe's native speaker identification feature.
 
-## Features Added
+## Table of Contents
+1. [Features](#features)
+2. [Prerequisites](#prerequisites)
+3. [Installation Steps](#installation-steps)
+   - [Install System Dependencies](#step-1-install-system-dependencies)
+   - [Install AWS C++ SDK](#step-2-install-aws-c-sdk)
+   - [Build mod_aws_transcribe](#step-3-build-mod_aws_transcribe)
+4. [Configuration](#configuration)
+5. [Usage](#usage)
+6. [Testing](#testing)
+7. [Troubleshooting](#troubleshooting)
 
-- Speaker metadata structure for mapping AWS speaker labels to real names
-- JSON metadata parsing in API command
-- Support for passing speaker names via API call
-- Integration with AWS Transcribe speaker diarization
+---
 
-## API Usage
+## Features
 
+- **Speaker metadata structure** for mapping AWS speaker labels to real names
+- **JSON metadata parsing** in API command for passing speaker names
+- **Stereo audio support** with deterministic speaker channel isolation
+- **Integration with AWS Transcribe** speaker diarization feature
+- **Foundation for extensions** - can be integrated with webhooks, Pusher, or other services
+
+---
+
+## Prerequisites
+
+- Ubuntu 20.04/22.04 or Debian 10/11 (other distros similar)
+- FreeSWITCH 1.10.x installed and configured
+- Root or sudo access
+- AWS account with Transcribe service access
+- At least 4GB RAM and 10GB free disk space (for building AWS SDK)
+
+---
+
+## Installation Steps
+
+### Step 1: Install System Dependencies
+
+#### Ubuntu/Debian
+
+```bash
+# Update package lists
+sudo apt-get update
+
+# Install build essentials
+sudo apt-get install -y build-essential git cmake autoconf automake libtool pkg-config
+
+# Install FreeSWITCH development headers
+sudo apt-get install -y freeswitch-meta-dev
+
+# If FreeSWITCH dev headers not available via package, install from source
+# See: https://freeswitch.org/confluence/display/FREESWITCH/Installation
+
+# Install required libraries
+sudo apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libcjson-dev \
+    uuid-dev
+
+# Install cJSON (if not available via package manager)
+if ! dpkg -l | grep -q libcjson-dev; then
+    cd /tmp
+    git clone https://github.com/DaveGamble/cJSON.git
+    cd cJSON
+    mkdir build && cd build
+    cmake ..
+    make
+    sudo make install
+    sudo ldconfig
+fi
 ```
-aws_transcribe <uuid> start <lang-code> [interim] [stereo|mono] [bugname] [{"speakers":["Name1","Name2"]}]
+
+#### CentOS/RHEL 7/8
+
+```bash
+# Update package lists
+sudo yum update -y
+
+# Install build tools
+sudo yum groupinstall -y "Development Tools"
+sudo yum install -y cmake3 git autoconf automake libtool pkgconfig
+
+# Install FreeSWITCH development headers
+sudo yum install -y freeswitch-devel
+
+# Install required libraries
+sudo yum install -y \
+    libcurl-devel \
+    openssl-devel \
+    zlib-devel \
+    libuuid-devel
+
+# Install cJSON from source
+cd /tmp
+git clone https://github.com/DaveGamble/cJSON.git
+cd cJSON
+mkdir build && cd build
+cmake3 ..
+make
+sudo make install
+sudo ldconfig
 ```
 
-**Example:**
-```
-aws_transcribe abc-123 start en-US interim stereo my_bug {"speakers":["Caller: John Doe","Callee: Jane Smith"]}
+### Step 2: Install AWS C++ SDK
+
+The AWS C++ SDK is required for AWS Transcribe Streaming API.
+
+#### Option A: Automated Installation (Recommended)
+
+Using the ansible role:
+
+```bash
+# Install Ansible
+sudo apt-get install -y ansible  # Ubuntu/Debian
+# OR
+sudo yum install -y ansible      # CentOS/RHEL
+
+# Clone the ansible role
+cd /tmp
+git clone https://github.com/davehorton/ansible-role-fsmrf.git
+cd ansible-role-fsmrf
+
+# Run only the AWS SDK installation task
+ansible-playbook -i localhost, -c local tasks/grpc.yml
+
+# This will install AWS SDK to:
+# /usr/src/freeswitch/libs/aws-sdk-cpp
 ```
 
-## Speaker Mapping
+#### Option B: Manual Installation (Full Control)
 
-When using stereo mode with speaker diarization:
-- **spk_0** (left channel) = First name in speakers array (typically caller)
-- **spk_1** (right channel) = Second name in speakers array (typically callee)
+```bash
+# Set FreeSWITCH source directory
+# Adjust this path if your FreeSWITCH source is elsewhere
+export FS_SRC_DIR=/usr/src/freeswitch
+
+# Create libs directory if it doesn't exist
+sudo mkdir -p ${FS_SRC_DIR}/libs
+cd ${FS_SRC_DIR}/libs
+
+# Clone AWS SDK C++ (this will take a few minutes)
+sudo git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp.git
+cd aws-sdk-cpp
+
+# Create build directory
+sudo mkdir build
+cd build
+
+# Configure CMake
+# We only build the transcribestreaming component to save time and space
+sudo cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_ONLY="transcribestreaming" \
+    -DENABLE_TESTING=OFF \
+    -DBUILD_SHARED_LIBS=ON \
+    -DCMAKE_INSTALL_PREFIX=${FS_SRC_DIR}/libs/aws-sdk-cpp/build/.deps/install
+
+# Build (this takes 15-30 minutes depending on your system)
+# Use -j$(nproc) to use all CPU cores
+sudo make -j$(nproc)
+
+# Install
+sudo make install
+
+# Verify installation
+ls -la ${FS_SRC_DIR}/libs/aws-sdk-cpp/build/.deps/install/lib/
+# You should see libaws-cpp-sdk-*.so files
+```
+
+**Note:** If you get compilation errors, you may need to update your GCC:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y gcc-9 g++-9
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90
+sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90
+
+# CentOS/RHEL
+sudo yum install -y centos-release-scl
+sudo yum install -y devtoolset-9
+scl enable devtoolset-9 bash
+```
+
+### Step 3: Build mod_aws_transcribe
+
+```bash
+# Clone the repository
+cd /usr/src
+sudo git clone https://github.com/srthorat/freeswitch_modules.git
+cd freeswitch_modules
+
+# Checkout the AWS diarization branch
+sudo git checkout claude/aws-transcribe-speaker-diarization-011CV5rDARmbG2qx8jdzGpq9
+
+# Navigate to module directory
+cd modules/mod_aws_transcribe
+
+# Set FreeSWITCH source directory (if not already set)
+export FS_SRC_DIR=/usr/src/freeswitch
+
+# Generate build configuration files
+aclocal
+autoconf
+automake --add-missing
+
+# If automake complains about missing files, create them:
+touch NEWS README AUTHORS ChangeLog
+
+# Configure the module
+./configure --with-freeswitch-src=${FS_SRC_DIR}
+
+# If configure fails with "cannot find freeswitch headers", ensure:
+# 1. FreeSWITCH is installed or source is available
+# 2. FS_SRC_DIR points to the correct location
+
+# Build the module
+make
+
+# If build is successful, install it
+sudo make install
+
+# Verify installation
+ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+# The file should exist and be around 1-2 MB
+```
+
+**Common Build Issues:**
+
+```bash
+# If you get "aws_transcribe_glue.h: No such file"
+# Make sure you're in the correct directory:
+pwd  # Should show: /usr/src/freeswitch_modules/modules/mod_aws_transcribe
+
+# If you get linker errors about AWS SDK
+# Verify AWS SDK path in Makefile.am matches your installation
+grep "aws-sdk-cpp" Makefile.am
+
+# If you get "cannot find -laws-cpp-sdk-transcribestreaming"
+# Check that AWS SDK built successfully:
+ls ${FS_SRC_DIR}/libs/aws-sdk-cpp/build/aws-cpp-sdk-transcribestreaming/
+# Should see libaws-cpp-sdk-transcribestreaming.so
+```
+
+---
 
 ## Configuration
 
-Enable speaker diarization by setting the channel variable:
+### 1. Load the Module in FreeSWITCH
+
+Edit `/etc/freeswitch/autoload_configs/modules.conf.xml`:
+
+```xml
+<configuration name="modules.conf" description="Modules">
+  <modules>
+    <!-- Add this line -->
+    <load module="mod_aws_transcribe"/>
+
+    <!-- Other modules... -->
+  </modules>
+</configuration>
 ```
-AWS_SHOW_SPEAKER_LABEL=true
-```
 
-## Dependencies
+### 2. Configure AWS Credentials
 
-- AWS C++ SDK for Transcribe Streaming
-- FreeSWITCH with media bug support
-- cJSON for JSON parsing
+#### Method 1: Environment Variables (Recommended)
 
-## Building
+Edit FreeSWITCH systemd service file:
 
 ```bash
-./configure --with-freeswitch-src=/path/to/freeswitch
-make
-sudo make install
+sudo nano /etc/systemd/system/freeswitch.service
+# or
+sudo nano /lib/systemd/system/freeswitch.service
 ```
 
-## Notes
+Add environment variables:
 
-- This branch provides the foundation for speaker diarization
-- Speaker metadata is passed through the response handler for custom processing
-- Can be used standalone or extended with additional integrations (e.g., Pusher, webhooks)
+```ini
+[Service]
+Type=forking
+PIDFile=/run/freeswitch/freeswitch.pid
+Environment="DAEMON_OPTS=-nonat"
+
+# AWS Configuration
+Environment="AWS_ACCESS_KEY_ID=AKIAXXXXXXXXXXXXXXXX"
+Environment="AWS_SECRET_ACCESS_KEY=your-secret-access-key-here"
+Environment="AWS_REGION=us-east-1"
+
+# Optional: For temporary credentials
+# Environment="AWS_SESSION_TOKEN=your-session-token"
+
+ExecStart=/usr/bin/freeswitch -u freeswitch -g freeswitch -ncwait $DAEMON_OPTS
+TimeoutSec=45s
+Restart=always
+```
+
+Reload and restart FreeSWITCH:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart freeswitch
+```
+
+#### Method 2: Environment File
+
+Create `/etc/default/freeswitch`:
+
+```bash
+# AWS Transcribe Configuration
+export AWS_ACCESS_KEY_ID="AKIAXXXXXXXXXXXXXXXX"
+export AWS_SECRET_ACCESS_KEY="your-secret-access-key-here"
+export AWS_REGION="us-east-1"
+```
+
+Make it secure:
+
+```bash
+sudo chmod 600 /etc/default/freeswitch
+sudo chown freeswitch:freeswitch /etc/default/freeswitch
+```
+
+Reference in systemd service:
+
+```ini
+[Service]
+EnvironmentFile=/etc/default/freeswitch
+```
+
+#### Method 3: Per-Call Channel Variables
+
+Set channel variables before starting transcription:
+
+```xml
+<action application="set" data="AWS_ACCESS_KEY_ID=AKIAXXXXXXXXXXXXXXXX"/>
+<action application="set" data="AWS_SECRET_ACCESS_KEY=your-secret-key"/>
+<action application="set" data="AWS_REGION=us-east-1"/>
+```
+
+### 3. Get AWS Credentials
+
+If you don't have AWS credentials:
+
+```bash
+# Install AWS CLI
+sudo apt-get install -y awscli  # Ubuntu/Debian
+# OR
+sudo yum install -y aws-cli     # CentOS/RHEL
+
+# Configure AWS CLI
+aws configure
+# Enter:
+# - AWS Access Key ID
+# - AWS Secret Access Key
+# - Default region (e.g., us-east-1)
+# - Default output format (json)
+
+# Verify credentials
+aws sts get-caller-identity
+
+# Your credentials are stored in:
+cat ~/.aws/credentials
+```
+
+**Create IAM User for FreeSWITCH:**
+
+1. Go to AWS Console → IAM → Users → Add User
+2. User name: `freeswitch-transcribe`
+3. Access type: Programmatic access
+4. Attach policy: Create custom policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "transcribe:StartStreamTranscription",
+        "transcribe:StartStreamTranscriptionWebSocket"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+5. Copy Access Key ID and Secret Access Key
+
+---
+
+## Usage
+
+### Basic API Command
+
+```bash
+aws_transcribe <uuid> start <lang-code> [interim] [stereo|mono] [bugname] [{"speakers":["Name1","Name2"]}]
+```
+
+### Example 1: Simple Transcription (No Speaker Diarization)
+
+```bash
+# In fs_cli
+# Start a call
+originate user/1000 &echo
+
+# Get UUID from output, then start transcription
+aws_transcribe <UUID> start en-US interim
+```
+
+### Example 2: With Speaker Diarization
+
+Enable speaker diarization with channel variable:
+
+```bash
+# In fs_cli
+originate {AWS_SHOW_SPEAKER_LABEL=true}user/1000 &echo
+
+# Start transcription with speaker names
+aws_transcribe <UUID> start en-US interim stereo mybug {"speakers":["Alice","Bob"]}
+```
+
+### Example 3: FreeSWITCH Dialplan Integration
+
+Create `/etc/freeswitch/dialplan/default/01_aws_transcribe.xml`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<include>
+  <extension name="transcribe_test">
+    <condition field="destination_number" expression="^9999$">
+
+      <!-- Enable speaker diarization -->
+      <action application="set" data="AWS_SHOW_SPEAKER_LABEL=true"/>
+
+      <!-- Answer the call -->
+      <action application="answer"/>
+
+      <!-- Start transcription -->
+      <action application="inline" data="aws_transcribe ${uuid} start en-US interim stereo transcribe_bug {&quot;speakers&quot;:[&quot;Caller&quot;,&quot;System&quot;]}"/>
+
+      <!-- Play audio for testing -->
+      <action application="playback" data="/usr/share/freeswitch/sounds/en/us/callie/ivr/8000/ivr-thank_you_for_calling.wav"/>
+
+      <!-- Stop transcription -->
+      <action application="inline" data="aws_transcribe ${uuid} stop transcribe_bug"/>
+
+      <action application="hangup"/>
+    </condition>
+  </extension>
+</include>
+```
+
+Reload dialplan:
+
+```bash
+fs_cli -x "reloadxml"
+```
+
+### Example 4: Node.js Integration (drachtio-fsmrf)
+
+```javascript
+const Mrf = require('drachtio-fsmrf');
+const mrf = new Mrf(require('drachtio')());
+
+mrf.connect({address: '127.0.0.1', port: 8021, secret: 'ClueCon'})
+  .then((mediaserver) => {
+    return mediaserver.createEndpoint({remoteSdp: remoteSdp});
+  })
+  .then((endpoint) => {
+    // Enable speaker diarization
+    endpoint.set('AWS_SHOW_SPEAKER_LABEL', 'true');
+
+    // Start transcription with speaker names
+    const speakers = {speakers: ["Agent: John", "Customer: Jane"]};
+    endpoint.api('aws_transcribe',
+      `${endpoint.uuid} start en-US interim stereo mybug ${JSON.stringify(speakers)}`);
+
+    // Subscribe to transcription events
+    endpoint.on('aws_transcribe::transcription', (evt) => {
+      console.log('Transcription:', evt.body);
+      // Process transcription...
+    });
+  });
+```
+
+### Speaker Mapping in Stereo Mode
+
+When using **stereo mode**, speaker mapping is deterministic:
+
+- **Left channel (0)** = Caller → `spk_0` → speakers[0]
+- **Right channel (1)** = Callee → `spk_1` → speakers[1]
+
+**Example:**
+
+```json
+{"speakers": ["Caller: John (1000)", "Callee: Jane (1001)"]}
+```
+
+AWS will label:
+- John as `spk_0` (always)
+- Jane as `spk_1` (always)
+
+---
+
+## Testing
+
+### Test 1: Verify Module Loaded
+
+```bash
+fs_cli -x "module_exists mod_aws_transcribe"
+# Should return: true
+
+fs_cli -x "show module mod_aws_transcribe"
+# Should show module details
+```
+
+### Test 2: Verify AWS Credentials
+
+```bash
+fs_cli -x "eval \${getenv(AWS_ACCESS_KEY_ID)}"
+# Should show your access key
+
+fs_cli -x "eval \${getenv(AWS_REGION)}"
+# Should show your region (e.g., us-east-1)
+```
+
+### Test 3: Test Transcription
+
+```bash
+# Dial extension 9999 (if you created the dialplan above)
+# Or create a test call:
+
+fs_cli
+> originate {AWS_SHOW_SPEAKER_LABEL=true}user/1000 &echo
+# Note the UUID from output
+
+> aws_transcribe <UUID> start en-US interim stereo test_bug {"speakers":["Speaker1","Speaker2"]}
+# Should return: +OK Success
+
+# Talk into the call...
+
+# Check FreeSWITCH logs
+> console loglevel DEBUG
+# You should see transcription events
+
+# Stop transcription
+> aws_transcribe <UUID> stop test_bug
+```
+
+### Test 4: Monitor Events
+
+```bash
+# In fs_cli
+> events plain custom aws_transcribe::transcription
+
+# Make a call and start transcription
+# You should see events like:
+# Event-Name: CUSTOM
+# Event-Subclass: aws_transcribe::transcription
+# transcription-vendor: aws
+# Content-Length: <size>
+#
+# [{"is_final":true,"alternatives":[{"transcript":"hello world"}]}]
+```
+
+---
+
+## Troubleshooting
+
+### Module fails to load
+
+**Error:** `Cannot load module mod_aws_transcribe`
+
+```bash
+# Check module file exists
+ls -la /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+
+# Check dependencies
+ldd /usr/lib/freeswitch/mod/mod_aws_transcribe.so
+# All libraries should be found (=> /path/to/lib.so)
+# If you see "not found", install missing library
+
+# Check FreeSWITCH logs
+tail -f /var/log/freeswitch/freeswitch.log | grep -i aws
+```
+
+**Solution:**
+
+```bash
+# If AWS SDK libraries not found:
+export LD_LIBRARY_PATH=/usr/src/freeswitch/libs/aws-sdk-cpp/build/.deps/install/lib:$LD_LIBRARY_PATH
+sudo ldconfig
+
+# Or add to /etc/ld.so.conf.d/freeswitch.conf:
+echo "/usr/src/freeswitch/libs/aws-sdk-cpp/build/.deps/install/lib" | sudo tee /etc/ld.so.conf.d/aws-sdk.conf
+sudo ldconfig
+```
+
+### Transcription not starting
+
+**Error:** `-ERR Operation Failed`
+
+```bash
+# Check AWS credentials
+fs_cli -x "eval \${getenv(AWS_ACCESS_KEY_ID)}"
+fs_cli -x "eval \${getenv(AWS_SECRET_ACCESS_KEY)}"
+fs_cli -x "eval \${getenv(AWS_REGION)}"
+
+# Test AWS credentials with CLI
+aws transcribe help
+
+# Check FreeSWITCH logs for AWS errors
+tail -f /var/log/freeswitch/freeswitch.log | grep -i "aws\|transcribe"
+```
+
+**Common errors:**
+
+- `InvalidSignatureException`: Check AWS_SECRET_ACCESS_KEY
+- `UnrecognizedClientException`: Check AWS_ACCESS_KEY_ID
+- `AccessDeniedException`: Check IAM permissions
+- `Region not supported`: Use supported region (us-east-1, us-west-2, etc.)
+
+### No transcription events received
+
+```bash
+# Ensure you're subscribed to events
+fs_cli
+> events plain custom aws_transcribe::transcription
+
+# Check if transcription actually started
+> show channels
+
+# Increase log level
+> console loglevel DEBUG
+
+# Check if audio is being sent
+> uuid_audio_fork <UUID> start /tmp/test.wav 20 both
+# This will record audio to /tmp/test.wav for debugging
+```
+
+### Speaker diarization not working
+
+```bash
+# Ensure AWS_SHOW_SPEAKER_LABEL is set
+fs_cli -x "uuid_getvar <UUID> AWS_SHOW_SPEAKER_LABEL"
+# Should return: true
+
+# Ensure using stereo mode
+# The command should include "stereo"
+aws_transcribe <UUID> start en-US interim stereo ...
+
+# Check transcription output for speaker_label field
+```
+
+### Build errors
+
+**Error:** `aws_transcribe_glue.h: No such file or directory`
+
+```bash
+# Ensure you're in the correct directory
+pwd
+# Should be: /usr/src/freeswitch_modules/modules/mod_aws_transcribe
+
+# List files
+ls -la
+# Should see: aws_transcribe_glue.cpp, aws_transcribe_glue.h, mod_aws_transcribe.c
+```
+
+**Error:** `cannot find -laws-cpp-sdk-transcribestreaming`
+
+```bash
+# Check AWS SDK installation
+ls /usr/src/freeswitch/libs/aws-sdk-cpp/build/aws-cpp-sdk-transcribestreaming/
+# Should see libaws-cpp-sdk-transcribestreaming.so
+
+# Check Makefile.am paths match your installation
+grep "aws-sdk-cpp" Makefile.am
+
+# If paths don't match, update Makefile.am with correct paths
+```
+
+**Error:** `aclocal: command not found`
+
+```bash
+# Install autotools
+sudo apt-get install -y autoconf automake libtool  # Ubuntu/Debian
+sudo yum install -y autoconf automake libtool      # CentOS/RHEL
+```
+
+### Performance issues
+
+For high-volume deployments (100+ concurrent calls):
+
+```bash
+# Increase FreeSWITCH session limits
+# Edit /etc/freeswitch/autoload_configs/switch.conf.xml
+<param name="max-sessions" value="10000"/>
+<param name="sessions-per-second" value="1000"/>
+
+# Monitor system resources
+top -p $(pidof freeswitch)
+
+# Monitor AWS API usage
+# Check AWS CloudWatch → Transcribe metrics
+
+# Increase system limits
+# Edit /etc/security/limits.conf
+freeswitch soft nofile 999999
+freeswitch hard nofile 999999
+freeswitch soft core unlimited
+freeswitch hard core unlimited
+```
+
+---
+
+## Advanced Configuration
+
+### Custom Language Models
+
+Set channel variables:
+
+```xml
+<action application="set" data="AWS_VOCABULARY_NAME=my-custom-vocabulary"/>
+<action application="set" data="AWS_VOCABULARY_FILTER_NAME=profanity-filter"/>
+<action application="set" data="AWS_VOCABULARY_FILTER_METHOD=mask"/>
+```
+
+### Audio Formats
+
+Supported sample rates:
+- 8000 Hz (narrow-band)
+- 16000 Hz (wide-band)
+- 48000 Hz (ultra-wide-band)
+
+FreeSWITCH will automatically resample audio to match AWS Transcribe requirements.
+
+### Multiple Concurrent Transcriptions
+
+You can run multiple transcriptions on the same call with different bug names:
+
+```bash
+aws_transcribe <UUID> start en-US interim mono bug1
+aws_transcribe <UUID> start es-US interim mono bug2
+```
+
+---
+
+## Next Steps
+
+- Integrate with webhooks for real-time transcript delivery
+- Add Pusher integration (see pusher-integration branch)
+- Implement custom vocabulary for domain-specific terms
+- Set up CloudWatch monitoring for AWS API usage
+- Build analytics dashboard for transcription data
+
+---
+
+## Support
+
+For issues and questions:
+- FreeSWITCH: https://freeswitch.org/confluence/
+- AWS Transcribe: https://docs.aws.amazon.com/transcribe/
+- Module issues: https://github.com/srthorat/freeswitch_modules/issues
+
+---
+
+## License
+
+Same as FreeSWITCH (MPL 1.1)
