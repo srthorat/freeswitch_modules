@@ -272,7 +272,11 @@ RUN echo "==========================================" \
     && echo "" \
     && echo "Installing FreeSWITCH..." \
     && make install \
-    && echo "✅ FreeSWITCH installed to /usr/local/freeswitch"
+    && echo "✅ FreeSWITCH installed to /usr/local/freeswitch" \
+    && echo "" \
+    && echo "Installing vanilla configuration files..." \
+    && cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
+    && echo "✅ Vanilla configs installed"
 
 # Apply production configuration changes (same as production)
 RUN echo "==========================================" \
