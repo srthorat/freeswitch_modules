@@ -74,11 +74,11 @@ RUN git clone --depth 1 -b v$LIBWEBSOCKETS_VERSION https://github.com/warmcat/li
     && mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && make && make install
 
 FROM base AS speechsdk
-COPY ./files/SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz /tmp/
 WORKDIR /tmp
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN tar xvfz SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz \
-    && cd SpeechSDK-Linux-$SPEECH_SDK_VERSION \
+RUN wget -q https://aka.ms/csspeech/linuxbinary -O SpeechSDK-Linux.tar.gz \
+    && tar xzf SpeechSDK-Linux.tar.gz \
+    && cd SpeechSDK-Linux-* \
     && cp -r include /usr/local/include/MicrosoftSpeechSDK \
     && cp -r lib/ /usr/local/lib/MicrosoftSpeechSDK \
     && cp /usr/local/lib/MicrosoftSpeechSDK/x64/libMicrosoft.*.so /usr/local/lib/ \
@@ -159,7 +159,6 @@ COPY --from=grpc-googleapis /usr/local/src/googleapis /usr/local/src/freeswitch/
 RUN cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
     && cp /tmp/Makefile.am.extra /usr/local/src/freeswitch/Makefile.am \
     && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
-    && cp /tmp/modules.conf.vanilla.xml.extra /usr/local/src/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml \
     && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
     && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src  \
     && cp /tmp/mod_avmd.c.patch /usr/local/src/freeswitch/src/mod/applications/mod_avmd \

@@ -224,7 +224,6 @@ The `files/` directory contains critical build configurations, patches, and sour
 |------|-------|---------|
 | **configure.ac.extra** | 2,471 | FreeSWITCH autoconf configuration with custom flags |
 | **Makefile.am.extra** | 1,052 | Top-level build targets and module inclusion |
-| **modules.conf.vanilla.xml.extra** | 169 | Runtime module loading configuration |
 | **ax_check_compile_flag.m4** | 50 | Autoconf macro for SIMD optimization detection (AVX2/SSE2) |
 
 **configure.ac.extra adds these critical flags:**
@@ -267,6 +266,10 @@ These files provide custom event handling and conference functionality tailored 
 - FreeSWITCH uses vanilla default configurations
 - Transcription modules use default FreeSWITCH dialplan and SIP profiles
 - Runtime configuration can be added post-installation as needed
+
+**Downloaded Automatically During Build:**
+- **Azure Speech SDK** - Downloaded from Microsoft (https://aka.ms/csspeech/linuxbinary) - always latest version
+- **AWS SDK C++** - Downloaded from GitHub if not cached in files/
 
 ---
 

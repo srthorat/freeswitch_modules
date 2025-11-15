@@ -195,15 +195,12 @@ batch_4() {
     log_info "BATCH 4: Azure Speech SDK"
     log_info "========================================="
 
-    log_info "Installing Azure Speech SDK $SPEECH_SDK_VERSION..."
+    log_info "Downloading and installing Azure Speech SDK (latest)..."
     if [ ! -d "/usr/local/include/MicrosoftSpeechSDK" ]; then
         cd /tmp
-        if [ ! -f "${SCRIPT_DIR}/files/SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz" ]; then
-            log_error "Azure Speech SDK file not found: ${SCRIPT_DIR}/files/SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz"
-            exit 1
-        fi
-        tar xzf ${SCRIPT_DIR}/files/SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz
-        cd SpeechSDK-Linux-$SPEECH_SDK_VERSION
+        wget -q https://aka.ms/csspeech/linuxbinary -O SpeechSDK-Linux.tar.gz
+        tar xzf SpeechSDK-Linux.tar.gz
+        cd SpeechSDK-Linux-*
         cp -r include /usr/local/include/MicrosoftSpeechSDK
         cp -r lib/ /usr/local/lib/MicrosoftSpeechSDK
         cp /usr/local/lib/MicrosoftSpeechSDK/x64/libMicrosoft.*.so /usr/local/lib/
