@@ -159,7 +159,6 @@ COPY --from=grpc-googleapis /usr/local/src/googleapis /usr/local/src/freeswitch/
 RUN cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
     && cp /tmp/Makefile.am.extra /usr/local/src/freeswitch/Makefile.am \
     && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
-    && cp /tmp/modules.conf.in.extra /usr/local/src/freeswitch/build/modules.conf.in \
     && cp /tmp/modules.conf.vanilla.xml.extra /usr/local/src/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml \
     && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
     && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src  \

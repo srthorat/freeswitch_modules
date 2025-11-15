@@ -224,7 +224,6 @@ The `files/` directory contains critical build configurations, patches, and sour
 |------|-------|---------|
 | **configure.ac.extra** | 2,471 | FreeSWITCH autoconf configuration with custom flags |
 | **Makefile.am.extra** | 1,052 | Top-level build targets and module inclusion |
-| **modules.conf.in.extra** | 195 | Build-time module list (includes transcription modules) |
 | **modules.conf.vanilla.xml.extra** | 169 | Runtime module loading configuration |
 | **ax_check_compile_flag.m4** | 50 | Autoconf macro for SIMD optimization detection (AVX2/SSE2) |
 
