@@ -13,4 +13,4 @@ mod_audio_stream_la_CFLAGS   = $(AM_CFLAGS)
 mod_audio_stream_la_CXXFLAGS = $(AM_CXXFLAGS) -std=c++11 -I$(srcdir)/libs/libwsc/libwsc
 
 mod_audio_stream_la_LIBADD   = $(switch_builddir)/libfreeswitch.la
-mod_audio_stream_la_LDFLAGS  = -avoid-version -module -no-undefined -shared -lspeexdsp -lssl -lcrypto -lz -lpthread
+mod_audio_stream_la_LDFLAGS  = -avoid-version -module -no-undefined -shared -lspeexdsp -lssl -lcrypto -lz -lpthread -levent -levent_pthreads -levent_openssl

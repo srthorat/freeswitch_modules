@@ -196,7 +196,7 @@ batch_1() {
         pkg-config git wget curl libssl-dev zlib1g-dev libncurses5-dev \
         libsqlite3-dev libpcre3-dev libspeex-dev libspeexdsp-dev libedit-dev \
         libldns-dev liblua5.2-dev libopus-dev yasm nasm libavformat-dev \
-        libswscale-dev libjpeg-dev ca-certificates \
+        libswscale-dev libjpeg-dev ca-certificates libevent-dev \
         libgoogle-perftools-dev google-perftools libsndfile1-dev
 
     log_success "System dependencies installed"
