@@ -1,0 +1,483 @@
+# ============================================================================
+# Dockerfile for testing mod_audio_fork individually
+# ============================================================================
+# This Dockerfile builds FreeSWITCH with ONLY mod_audio_fork module for
+# faster validation and individual module testing.
+#
+# Build dependencies:
+#   - CMake (for building libwebsockets)
+#   - libwebsockets (required by mod_audio_fork)
+#   - FreeSWITCH core
+#   - mod_audio_fork module
+#
+# Usage:
+#   docker build -f dockerfiles/Dockerfile.mod_audio_fork -t freeswitch-mod-audio-fork:latest .
+# ============================================================================
+
+ARG DEBIAN_VERSION=12
+FROM debian:${DEBIAN_VERSION} AS base
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install base system dependencies with detailed logging
+RUN echo "=========================================" \
+    && echo "STAGE: Base System Dependencies" \
+    && echo "=========================================" \
+    && for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done \
+    && apt-get update && apt-get -y --quiet --allow-remove-essential upgrade \
+    && echo "Installing base build tools and FreeSWITCH dependencies..." \
+    && apt-get install -y --quiet --no-install-recommends \
+    build-essential git autoconf automake libtool \
+    curl wget pkg-config ca-certificates \
+    libssl-dev libcurl4-openssl-dev libz-dev \
+    libsqlite3-dev libpcre3-dev libspeex-dev libspeexdsp-dev \
+    libedit-dev libtiff-dev libopus-dev libsndfile1-dev \
+    libshout3-dev libldns-dev libjpeg-dev \
+    && echo "✅ Base dependencies installed successfully" \
+    && echo "========================================="
+
+# ============================================================================
+# Build Stage 1: CMake
+# ============================================================================
+FROM base AS cmake-builder
+
+ARG CMAKE_VERSION=3.28.3
+
+RUN echo "=========================================" \
+    && echo "STAGE 1: Building CMake ${CMAKE_VERSION}" \
+    && echo "=========================================" \
+    && cd /usr/local/src \
+    && wget -q https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz \
+    && echo "Downloaded CMake ${CMAKE_VERSION}" \
+    && tar xzf cmake-${CMAKE_VERSION}.tar.gz \
+    && cd cmake-${CMAKE_VERSION} \
+    && echo "Configuring CMake..." \
+    && ./bootstrap --parallel=$(nproc) \
+    && echo "Building CMake with $(nproc) CPU cores..." \
+    && make -j $(nproc) \
+    && echo "Installing CMake..." \
+    && make install \
+    && ldconfig /usr/local/lib \
+    && echo "✅ CMake ${CMAKE_VERSION} built and installed" \
+    && cmake --version \
+    && echo "========================================="
+
+# ============================================================================
+# Build Stage 2: libwebsockets
+# ============================================================================
+FROM cmake-builder AS libwebsockets-builder
+
+ARG LIBWEBSOCKETS_VERSION=4.3.3
+
+RUN echo "=========================================" \
+    && echo "STAGE 2: Building libwebsockets ${LIBWEBSOCKETS_VERSION}" \
+    && echo "=========================================" \
+    && cd /usr/local/src \
+    && git clone --depth 1 --branch v${LIBWEBSOCKETS_VERSION} https://github.com/warmcat/libwebsockets.git \
+    && echo "Cloned libwebsockets v${LIBWEBSOCKETS_VERSION}" \
+    && cd libwebsockets \
+    && mkdir build && cd build \
+    && echo "Configuring libwebsockets with CMake..." \
+    && cmake -DCMAKE_BUILD_TYPE=Release \
+           -DLWS_MAX_SMP=1 \
+           -DLWS_WITH_HTTP2=0 \
+           -DLWS_WITH_LIBUV=0 \
+           -DLWS_WITH_LIBEVENT=0 \
+           -DCMAKE_INSTALL_PREFIX=/usr \
+           .. \
+    && echo "Building libwebsockets with $(nproc) CPU cores..." \
+    && make -j $(nproc) \
+    && echo "Installing libwebsockets..." \
+    && make install \
+    && ldconfig \
+    && echo "✅ libwebsockets ${LIBWEBSOCKETS_VERSION} built and installed" \
+    && echo "Validating libwebsockets installation..." \
+    && pkg-config --modversion libwebsockets || echo "Warning: pkg-config not found for libwebsockets" \
+    && ls -la /usr/lib/libwebsockets.* || ls -la /usr/lib/x86_64-linux-gnu/libwebsockets.* \
+    && echo "========================================="
+
+# ============================================================================
+# Build Stage 3: FreeSWITCH Core
+# ============================================================================
+FROM libwebsockets-builder AS freeswitch-builder
+
+ARG FREESWITCH_VERSION=1.10.11
+ARG SPANDSP_VERSION=0d2e6ac
+ARG SOFIA_VERSION=1.13.17
+
+RUN echo "=========================================" \
+    && echo "STAGE 3: Building FreeSWITCH Core ${FREESWITCH_VERSION}" \
+    && echo "=========================================" \
+    && echo "Step 3.1: Building spandsp library..." \
+    && cd /usr/local/src \
+    && git clone --depth 1 https://github.com/freeswitch/spandsp.git \
+    && cd spandsp \
+    && git checkout ${SPANDSP_VERSION} \
+    && ./bootstrap.sh \
+    && ./configure --prefix=/usr \
+    && make -j $(nproc) \
+    && make install \
+    && ldconfig \
+    && echo "✅ spandsp built and installed" \
+    && echo "" \
+    && echo "Step 3.2: Building sofia-sip library..." \
+    && cd /usr/local/src \
+    && git clone --depth 1 --branch v${SOFIA_VERSION} https://github.com/freeswitch/sofia-sip.git \
+    && cd sofia-sip \
+    && ./bootstrap.sh \
+    && ./configure --prefix=/usr \
+    && make -j $(nproc) \
+    && make install \
+    && ldconfig \
+    && echo "✅ sofia-sip v${SOFIA_VERSION} built and installed" \
+    && echo "" \
+    && echo "Step 3.3: Cloning FreeSWITCH ${FREESWITCH_VERSION}..." \
+    && cd /usr/local/src \
+    && git clone --depth 1 --branch v${FREESWITCH_VERSION} https://github.com/signalwire/freeswitch.git \
+    && cd freeswitch \
+    && echo "✅ FreeSWITCH ${FREESWITCH_VERSION} cloned" \
+    && echo "========================================="
+
+# ============================================================================
+# Build Stage 4: mod_audio_fork Module
+# ============================================================================
+FROM freeswitch-builder AS module-builder
+
+# Copy only mod_audio_fork module
+COPY ./modules/mod_audio_fork /usr/local/src/freeswitch/src/mod/applications/mod_audio_fork
+
+RUN echo "=========================================" \
+    && echo "STAGE 4: Building FreeSWITCH + mod_audio_fork" \
+    && echo "=========================================" \
+    && cd /usr/local/src/freeswitch \
+    && echo "Step 4.1: Bootstrapping FreeSWITCH..." \
+    && ./bootstrap.sh -j \
+    && echo "✅ Bootstrap complete" \
+    && echo "" \
+    && echo "Step 4.2: Creating minimal modules.conf (only mod_audio_fork)..." \
+    && cat > modules.conf <<EOF
+# Minimal FreeSWITCH modules for mod_audio_fork testing
+# Only essential modules + mod_audio_fork are enabled
+
+# ===== Event Handlers =====
+# event_handlers/mod_event_socket
+
+# ===== Loggers =====
+loggers/mod_console
+loggers/mod_logfile
+
+# ===== Applications =====
+applications/mod_commands
+applications/mod_dptools
+applications/mod_audio_fork
+
+# ===== Dialplan =====
+dialplans/mod_dialplan_xml
+
+# ===== Endpoints =====
+# endpoints/mod_sofia
+
+# ===== Formats =====
+formats/mod_sndfile
+
+# ===== Say =====
+# say/mod_say_en
+EOF
+    && echo "✅ modules.conf created with mod_audio_fork enabled" \
+    && cat modules.conf \
+    && echo "" \
+    && echo "Step 4.3: Configuring FreeSWITCH..." \
+    && ./configure --prefix=/usr/local/freeswitch \
+        --enable-core-pgsql-support \
+        --disable-core-odbc-support \
+    && echo "✅ Configure complete" \
+    && echo "" \
+    && echo "Step 4.4: Building FreeSWITCH core with $(nproc) CPU cores..." \
+    && make -j $(nproc) \
+    && echo "✅ FreeSWITCH core built" \
+    && echo "" \
+    && echo "Step 4.5: Installing FreeSWITCH..." \
+    && make install \
+    && echo "✅ FreeSWITCH installed to /usr/local/freeswitch" \
+    && echo "========================================="
+
+# ============================================================================
+# Build Stage 5: Module Validation
+# ============================================================================
+FROM module-builder AS validator
+
+RUN echo "=========================================" \
+    && echo "STAGE 5: Module Validation" \
+    && echo "=========================================" \
+    && echo "Validation Point 1: Check module file exists" \
+    && MODULE_PATH="/usr/local/freeswitch/mod/mod_audio_fork.so" \
+    && if [ -f "$MODULE_PATH" ]; then \
+        echo "✅ Module file exists: $MODULE_PATH"; \
+        ls -lh "$MODULE_PATH"; \
+    else \
+        echo "❌ ERROR: Module file not found: $MODULE_PATH"; \
+        echo "Contents of /usr/local/freeswitch/mod/:"; \
+        ls -la /usr/local/freeswitch/mod/ || echo "Directory does not exist"; \
+        exit 1; \
+    fi \
+    && echo "" \
+    && echo "Validation Point 2: Check module dependencies with ldd" \
+    && echo "Checking shared library dependencies..." \
+    && ldd "$MODULE_PATH" \
+    && echo "" \
+    && echo "Validation Point 3: Verify libwebsockets linkage" \
+    && if ldd "$MODULE_PATH" | grep -q "libwebsockets"; then \
+        echo "✅ Module correctly linked with libwebsockets"; \
+        ldd "$MODULE_PATH" | grep libwebsockets; \
+    else \
+        echo "❌ ERROR: Module not linked with libwebsockets"; \
+        exit 1; \
+    fi \
+    && echo "" \
+    && echo "Validation Point 4: Check for missing dependencies" \
+    && if ldd "$MODULE_PATH" | grep -q "not found"; then \
+        echo "❌ ERROR: Missing dependencies detected:"; \
+        ldd "$MODULE_PATH" | grep "not found"; \
+        exit 1; \
+    else \
+        echo "✅ No missing dependencies"; \
+    fi \
+    && echo "" \
+    && echo "Validation Point 5: Check FreeSWITCH binary" \
+    && if [ -f "/usr/local/freeswitch/bin/freeswitch" ]; then \
+        echo "✅ FreeSWITCH binary exists"; \
+        ls -lh /usr/local/freeswitch/bin/freeswitch; \
+    else \
+        echo "❌ ERROR: FreeSWITCH binary not found"; \
+        exit 1; \
+    fi \
+    && echo "" \
+    && echo "Validation Point 6: List all installed modules" \
+    && echo "Installed modules in /usr/local/freeswitch/mod/:" \
+    && ls -lh /usr/local/freeswitch/mod/*.so \
+    && echo "=========================================" \
+    && echo "✅ All validation checks passed!" \
+    && echo "========================================="
+
+# ============================================================================
+# Final Stage: Runtime Image
+# ============================================================================
+FROM debian:${DEBIAN_VERSION} AS runtime
+
+# Install runtime dependencies
+RUN echo "=========================================" \
+    && echo "FINAL STAGE: Runtime Environment" \
+    && echo "=========================================" \
+    && apt-get update \
+    && echo "Installing runtime dependencies..." \
+    && apt-get install -y --quiet --no-install-recommends \
+        ca-certificates \
+        libsqlite3-0 \
+        libcurl4 \
+        libpcre3 \
+        libspeex1 \
+        libspeexdsp1 \
+        libedit2 \
+        libtiff5 \
+        libopus0 \
+        libsndfile1 \
+        libshout3 \
+    && ldconfig \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "✅ Runtime dependencies installed" \
+    && echo "========================================="
+
+# Copy FreeSWITCH installation from builder
+ARG TARGETARCH
+ENV LIB_DIR=/usr/lib/x86_64-linux-gnu
+RUN if [ "$TARGETARCH" = "arm64" ]; then LIB_DIR=/usr/lib/aarch64-linux-gnu; fi
+
+COPY --from=validator /usr/local/freeswitch/ /usr/local/freeswitch/
+COPY --from=validator /usr/local/bin/ /usr/local/bin/
+COPY --from=validator /usr/local/lib/ /usr/local/lib/
+COPY --from=validator $LIB_DIR/libwebsockets.* /usr/lib/
+
+RUN ldconfig \
+    && echo "=========================================" \
+    && echo "Runtime Validation: Verify module loading capability" \
+    && echo "=========================================" \
+    && ldd /usr/local/freeswitch/mod/mod_audio_fork.so \
+    && echo "========================================="
+
+# Create FreeSWITCH configuration to load mod_audio_fork
+RUN echo "=========================================" \
+    && echo "Creating FreeSWITCH Configuration" \
+    && echo "=========================================" \
+    && mkdir -p /usr/local/freeswitch/conf/autoload_configs \
+    && echo "Creating modules.conf.xml to load mod_audio_fork..." \
+    && cat > /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml <<'EOF'
+<configuration name="modules.conf" description="Modules">
+  <modules>
+    <!-- Console logging -->
+    <load module="mod_console"/>
+    <load module="mod_logfile"/>
+
+    <!-- Essential applications -->
+    <load module="mod_commands"/>
+    <load module="mod_dptools"/>
+
+    <!-- mod_audio_fork - The module we are testing -->
+    <load module="mod_audio_fork"/>
+
+    <!-- Dialplan -->
+    <load module="mod_dialplan_xml"/>
+
+    <!-- Audio format support -->
+    <load module="mod_sndfile"/>
+  </modules>
+</configuration>
+EOF
+    && echo "✅ modules.conf.xml created" \
+    && cat /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml \
+    && echo "" \
+    && echo "Creating minimal switch.conf.xml..." \
+    && cat > /usr/local/freeswitch/conf/autoload_configs/switch.conf.xml <<'EOF'
+<configuration name="switch.conf" description="Core Configuration">
+  <settings>
+    <param name="colorize-console" value="true"/>
+    <param name="loglevel" value="info"/>
+  </settings>
+</configuration>
+EOF
+    && echo "✅ switch.conf.xml created" \
+    && echo "========================================="
+
+# Set environment variables
+ENV PATH="/usr/local/freeswitch/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
+
+# Create validation script
+RUN cat > /validate-module.sh <<'EOF'
+#!/bin/bash
+set -e
+
+echo "========================================="
+echo "Module Load Validation Script"
+echo "========================================="
+
+echo ""
+echo "Step 1: Verify module file exists"
+if [ -f "/usr/local/freeswitch/mod/mod_audio_fork.so" ]; then
+    echo "✅ mod_audio_fork.so exists"
+    ls -lh /usr/local/freeswitch/mod/mod_audio_fork.so
+else
+    echo "❌ mod_audio_fork.so NOT FOUND"
+    exit 1
+fi
+
+echo ""
+echo "Step 2: Check module dependencies"
+echo "Running ldd on mod_audio_fork.so:"
+ldd /usr/local/freeswitch/mod/mod_audio_fork.so
+
+echo ""
+echo "Step 3: Verify libwebsockets linkage"
+if ldd /usr/local/freeswitch/mod/mod_audio_fork.so | grep -q "libwebsockets"; then
+    echo "✅ Module is linked with libwebsockets"
+else
+    echo "❌ Module is NOT linked with libwebsockets"
+    exit 1
+fi
+
+echo ""
+echo "Step 4: Check for missing dependencies"
+if ldd /usr/local/freeswitch/mod/mod_audio_fork.so | grep -q "not found"; then
+    echo "❌ ERROR: Missing dependencies:"
+    ldd /usr/local/freeswitch/mod/mod_audio_fork.so | grep "not found"
+    exit 1
+else
+    echo "✅ No missing dependencies"
+fi
+
+echo ""
+echo "Step 5: Test FreeSWITCH startup with module loading"
+echo "Starting FreeSWITCH in nonat mode to load modules..."
+timeout 30s freeswitch -nonat -nc -nf 2>&1 | tee /tmp/freeswitch-startup.log &
+FS_PID=$!
+
+# Wait for FreeSWITCH to start
+sleep 10
+
+echo ""
+echo "Step 6: Check if mod_audio_fork loaded successfully"
+if grep -q "mod_audio_fork" /tmp/freeswitch-startup.log; then
+    if grep -q "mod_audio_fork.*Successfully loaded" /tmp/freeswitch-startup.log || \
+       grep -q "mod_audio_fork.*LOADED" /tmp/freeswitch-startup.log; then
+        echo "✅ mod_audio_fork loaded successfully!"
+        grep "mod_audio_fork" /tmp/freeswitch-startup.log
+    else
+        echo "⚠️  mod_audio_fork mentioned in logs, checking for errors..."
+        grep "mod_audio_fork" /tmp/freeswitch-startup.log
+    fi
+else
+    echo "⚠️  mod_audio_fork not mentioned in startup logs"
+    echo "Full startup log:"
+    cat /tmp/freeswitch-startup.log
+fi
+
+# Kill FreeSWITCH
+kill $FS_PID 2>/dev/null || true
+wait $FS_PID 2>/dev/null || true
+
+echo ""
+echo "========================================="
+echo "✅ Validation Complete!"
+echo "========================================="
+EOF
+    && chmod +x /validate-module.sh \
+    && echo "✅ Validation script created at /validate-module.sh"
+
+# Create entrypoint script
+RUN cat > /entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+
+echo "========================================="
+echo "FreeSWITCH mod_audio_fork Test Container"
+echo "========================================="
+echo ""
+echo "Available commands:"
+echo "  1. /validate-module.sh  - Validate module loading"
+echo "  2. freeswitch           - Run FreeSWITCH"
+echo "  3. bash                 - Interactive shell"
+echo ""
+echo "========================================="
+
+# If no command provided, run validation
+if [ $# -eq 0 ]; then
+    exec /validate-module.sh
+else
+    exec "$@"
+fi
+EOF
+    && chmod +x /entrypoint.sh
+
+WORKDIR /usr/local/freeswitch
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []
+
+# Labels for documentation
+LABEL maintainer="FreeSWITCH Modules"
+LABEL description="FreeSWITCH with mod_audio_fork for individual module testing"
+LABEL module="mod_audio_fork"
+LABEL freeswitch.version="${FREESWITCH_VERSION}"
+LABEL libwebsockets.version="${LIBWEBSOCKETS_VERSION}"
+
+# Build information
+RUN echo "=========================================" \
+    && echo "Build Summary" \
+    && echo "=========================================" \
+    && echo "FreeSWITCH Version: ${FREESWITCH_VERSION}" \
+    && echo "Module: mod_audio_fork" \
+    && echo "Dependency: libwebsockets" \
+    && echo "" \
+    && echo "Module location: /usr/local/freeswitch/mod/mod_audio_fork.so" \
+    && echo "Validation script: /validate-module.sh" \
+    && echo "========================================="
