@@ -158,8 +158,16 @@ RUN echo "==========================================" \
     && git clone --depth 1 -b v$FREESWITCH_VERSION https://github.com/signalwire/freeswitch.git \
     && echo "✅ FreeSWITCH ${FREESWITCH_VERSION} cloned"
 
-# Copy ONLY mod_audio_fork module
-COPY ./modules/mod_audio_fork /usr/local/src/freeswitch/src/mod/applications/mod_audio_fork
+# Copy ALL modules (required for production configure.ac.extra to work)
+# Production configure.ac expects all module directories to exist
+# We only BUILD mod_audio_fork (controlled by modules.conf)
+COPY ./modules/ /usr/local/src/freeswitch/src/mod/applications/
+
+RUN echo "==========================================" \
+    && echo "Module directories copied:" \
+    && ls -1 /usr/local/src/freeswitch/src/mod/applications/ | grep ^mod_ \
+    && echo "Note: Only mod_audio_fork will be compiled (see modules.conf)" \
+    && echo "========================================="
 
 # Apply PRODUCTION patches and custom files (IDENTICAL to main Dockerfile)
 RUN echo "==========================================" \
