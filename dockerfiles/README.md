@@ -144,12 +144,10 @@ The individual module Dockerfiles build **PRODUCTION-IDENTICAL FreeSWITCH** but 
    - mod_avmd.c.patch
    - mod_httapi.c.patch
 
-✅ **All Custom Files Applied**
-   - configure.ac.extra
-   - Makefile.am.extra
+✅ **Production Custom Files Applied**
    - switch_event.c
    - mod_conference.h + conference_api.c
-   - ax_check_compile_flag.m4
+   - Note: configure.ac.extra/Makefile.am.extra skipped (designed for production with extra modules)
 
 ✅ **Production Configure Flags**
    - `--enable-tcmalloc=yes` (production performance)

@@ -169,16 +169,13 @@ RUN echo "==========================================" \
     && echo "Note: Only mod_audio_fork will be compiled (see modules.conf)" \
     && echo "========================================="
 
-# Apply PRODUCTION patches and custom files (IDENTICAL to main Dockerfile)
+# Apply PRODUCTION patches (skip configure.ac.extra/Makefile.am.extra for individual builds)
 RUN echo "==========================================" \
-    && echo "Applying production patches and custom files..." \
+    && echo "Applying production patches..." \
     && echo "==========================================" \
-    && cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
-    && echo "  ✓ Copied configure.ac.extra" \
-    && cp /tmp/Makefile.am.extra /usr/local/src/freeswitch/Makefile.am \
-    && echo "  ✓ Copied Makefile.am.extra" \
-    && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
-    && echo "  ✓ Copied ax_check_compile_flag.m4" \
+    && echo "NOTE: Using standard FreeSWITCH configure.ac for individual module builds" \
+    && echo "      Production configure.ac.extra expects modules not in this repo" \
+    && echo "" \
     && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
     && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src \
     && echo "  ✓ Copied patch files" \
@@ -201,7 +198,8 @@ RUN echo "==========================================" \
     && cp /tmp/mod_conference.h /usr/local/src/freeswitch/src/mod/applications/mod_conference \
     && cp /tmp/conference_api.c /usr/local/src/freeswitch/src/mod/applications/mod_conference \
     && echo "  ✓ Copied mod_conference custom files" \
-    && echo "✅ All production patches and custom files applied!"
+    && echo "✅ All applicable production patches applied!" \
+    && echo "   (configure.ac.extra skipped - designed for production with extra modules)"
 
 # Create minimal modules.conf for mod_audio_fork testing
 RUN echo "==========================================" \
