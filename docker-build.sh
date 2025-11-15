@@ -12,6 +12,15 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Detect platform
+PLATFORM="linux/amd64"
+if [[ "$(uname -m)" == "arm64" ]] || [[ "$(uname -m)" == "aarch64" ]]; then
+    echo "Detected ARM64 architecture (Apple Silicon or ARM Linux)"
+    echo "Note: Building for linux/amd64 with emulation (this will be slower)"
+    echo "For faster builds on Apple Silicon, consider using Rosetta or a native ARM64 build"
+    echo ""
+fi
+
 echo "Reading versions from .env..."
 
 # Read versions from .env
@@ -41,6 +50,7 @@ echo ""
 
 # Build Docker image with all build arguments
 docker build \
+    --platform "$PLATFORM" \
     --build-arg CMAKE_VERSION="$CMAKE_VERSION" \
     --build-arg GRPC_VERSION="$GRPC_VERSION" \
     --build-arg LIBWEBSOCKETS_VERSION="$LIBWEBSOCKETS_VERSION" \

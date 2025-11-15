@@ -117,6 +117,12 @@ sudo /usr/local/freeswitch/bin/freeswitch -nc -nonat -u freeswitch -g freeswitch
 - At least 16GB RAM allocated to Docker
 - At least 20GB free disk space
 
+**Important for Apple Silicon (M1/M2/M3) Macs:**
+- The build uses x86_64 architecture (linux/amd64) with emulation
+- Build time will be significantly longer (~2-3 hours due to emulation)
+- The `docker-build.sh` script automatically handles platform detection
+- If you encounter Rosetta errors, ensure Docker Desktop's "Use Rosetta for x86/amd64 emulation" is enabled in Settings > Features in Development
+
 ### Step 1: Clone Repository
 
 ```bash
@@ -365,17 +371,32 @@ This removes:
 
    Or manually pass all build args (see "Advanced: Manual build" section above).
 
-2. **Check Docker logs:**
+2. **Apple Silicon: "rosetta error: failed to open elf" or Trace/breakpoint trap:**
+
+   This occurs on M1/M2/M3 Macs when Rosetta emulation fails. Fix:
+
+   a. Enable Rosetta in Docker Desktop:
+      - Open Docker Desktop → Settings → Features in Development
+      - Enable "Use Rosetta for x86/amd64 emulation on Apple Silicon"
+      - Restart Docker Desktop
+
+   b. Or use Docker's built-in emulation (slower):
+      - The `docker-build.sh` script already sets `--platform linux/amd64`
+      - Build time will be 2-3x longer
+
+   c. Alternative: Use a cloud VM or Intel Mac for faster builds
+
+3. **Check Docker logs:**
    ```bash
    docker logs freeswitch
    ```
 
-3. **Inspect container:**
+4. **Inspect container:**
    ```bash
    docker exec -it freeswitch bash
    ```
 
-4. **Rebuild without cache:**
+5. **Rebuild without cache:**
 
    First remove the old image, then rebuild:
    ```bash
