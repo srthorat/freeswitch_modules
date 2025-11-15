@@ -130,19 +130,19 @@ git checkout claude/fix-incremental-batch-build-all-01WfPfYsy5N1LDzLrLiBokRy
 
 ### Step 2: Build Docker Image
 
+The Dockerfile uses local files (modules, patches, configs) from your current directory, so make sure you're building from the repository root.
+
 ```bash
 # Build the Docker image (this takes 60-120 minutes)
 docker build -t freeswitch-transcribe:latest .
-
-# Or build with build arguments (optional)
-docker build \
-  --build-arg FREESWITCH_VERSION=1.10.11 \
-  -t freeswitch-transcribe:latest .
 ```
+
+**Note:** The build automatically reads version configuration from the `.env` file.
 
 The Dockerfile:
 - Uses multi-stage build for optimization
 - Builds all dependencies from source
+- Uses local modules/patches (no git clone needed)
 - Includes module validation
 - Final image is Debian-based (~1.5GB)
 

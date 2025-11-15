@@ -10,7 +10,6 @@ ARG SPEECH_SDK_VERSION
 ARG SPANDSP_VERSION
 ARG SOFIA_VERSION
 ARG AWS_SDK_CPP_VERSION
-ARG FREESWITCH_MODULES_VERSION
 ARG FREESWITCH_VERSION
 
 RUN echo "CMAKE_VERSION=$CMAKE_VERSION"
@@ -20,7 +19,6 @@ RUN echo "SPEECH_SDK_VERSION=$SPEECH_SDK_VERSION"
 RUN echo "SPANDSP_VERSION=$SPANDSP_VERSION"
 RUN echo "SOFIA_VERSION=$SOFIA_VERSION"
 RUN echo "AWS_SDK_CPP_VERSION=$AWS_SDK_CPP_VERSION"
-RUN echo "FREESWITCH_MODULES_VERSION=$FREESWITCH_MODULES_VERSION"
 RUN echo "FREESWITCH_VERSION=$FREESWITCH_VERSION"
 
 RUN for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done \
@@ -83,10 +81,6 @@ RUN wget -q https://aka.ms/csspeech/linuxbinary -O SpeechSDK-Linux.tar.gz \
     && cp -r lib/ /usr/local/lib/MicrosoftSpeechSDK \
     && cp /usr/local/lib/MicrosoftSpeechSDK/x64/libMicrosoft.*.so /usr/local/lib/ \
     && ls -lrt /usr/local/lib/
-
-FROM base AS freeswitch-modules
-WORKDIR /usr/local/src
-RUN git clone --depth 1 -b $FREESWITCH_MODULES_VERSION https://github.com/srthorat/freeswitch_modules.git
 
 FROM base AS spandsp
 WORKDIR /usr/local/src
@@ -153,7 +147,7 @@ COPY --from=websockets /usr/local/lib/ /usr/local/lib/
 WORKDIR /usr/local/src
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 RUN git clone --depth 1 -b v$FREESWITCH_VERSION https://github.com/signalwire/freeswitch.git
-COPY --from=freeswitch-modules /usr/local/src/freeswitch_modules/modules/ /usr/local/src/freeswitch/src/mod/applications/
+COPY ./modules/ /usr/local/src/freeswitch/src/mod/applications/
 
 COPY --from=grpc-googleapis /usr/local/src/googleapis /usr/local/src/freeswitch/libs/googleapis
 RUN cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
