@@ -60,7 +60,10 @@ Build CMake from source (required for some dependencies)
 Build module-specific dependencies (e.g., libwebsockets for mod_audio_fork)
 
 ### Stage 4: Build FreeSWITCH Core
-Build FreeSWITCH with minimal modules enabled
+Build FreeSWITCH with minimal modules enabled and module-specific configure flags
+- For mod_audio_fork: `--with-lws=yes` (enables libwebsockets support)
+- Uses vanilla FreeSWITCH without custom patches
+- Minimal configuration for faster builds
 
 ### Stage 5: Static Validation
 Validate module compilation and dependencies:
@@ -117,6 +120,80 @@ Each Dockerfile includes multiple validation points:
    - Starts FreeSWITCH to test module loading
    - Checks FreeSWITCH logs for successful load
    - Available for testing the final container
+
+## Differences from Main Production Dockerfile
+
+The individual module Dockerfiles are **intentionally simplified** compared to the main production Dockerfile:
+
+### What We Include:
+✅ **Module-specific configure flags**
+   - `--with-lws=yes` for mod_audio_fork (libwebsockets support)
+   - `--with-aws=yes` for mod_aws_transcribe (when building that module)
+   - Only flags needed for the specific module being tested
+
+✅ **Module-specific dependencies**
+   - Only the libraries required by the target module
+   - Minimal FreeSWITCH dependencies
+
+✅ **Vanilla FreeSWITCH**
+   - Clean FreeSWITCH source without patches
+   - Standard configuration
+   - Ensures modules work with standard FreeSWITCH installations
+
+### What We Exclude:
+❌ **Custom FreeSWITCH patches** (switch_core_media.c, switch_rtp.c, mod_avmd.c, mod_httapi.c)
+   - These are production-specific customizations
+   - Not needed for basic module functionality testing
+   - Adds complexity and build time
+
+❌ **Production optimizations** (--enable-tcmalloc=yes)
+   - Testing doesn't require production performance optimizations
+   - Faster builds without tcmalloc
+
+❌ **Unrelated configure flags** (--with-extra=yes)
+   - Only include flags needed for the specific module
+   - Reduces dependencies and build time
+
+❌ **Configuration file modifications**
+   - Codec preferences, XML modifications
+   - Testing uses minimal default configuration
+   - Production configs are in main Dockerfile
+
+### Why This Approach?
+
+1. **Faster iteration**: 15-25 min vs 90-150 min builds
+2. **Clear dependencies**: See exactly what each module needs
+3. **Standard compliance**: Ensures modules work with vanilla FreeSWITCH
+4. **Easier debugging**: Fewer variables when troubleshooting
+5. **Modular testing**: Test one thing at a time
+
+### When to Use Which Dockerfile?
+
+**Individual Module Dockerfiles** (`dockerfiles/Dockerfile.mod_*`):
+- Development and testing of a specific module
+- Quick validation of module changes
+- Debugging module-specific issues
+- CI/CD module-level testing
+
+**Main Production Dockerfile** (`Dockerfile`):
+- Production deployments
+- Full feature set needed
+- All 6 modules together
+- Custom patches and optimizations required
+
+### Configuration Comparison
+
+| Feature | Individual Module | Main Production |
+|---------|------------------|-----------------|
+| **FreeSWITCH Source** | Vanilla (unpatched) | Custom patches applied |
+| **Configure Flags** | Module-specific only (`--with-lws=yes`) | All flags (`--with-lws`, `--with-aws`, `--with-extra`, `--enable-tcmalloc`) |
+| **Modules Built** | 1 module + essentials (7 total) | All 6 transcription modules + full suite |
+| **Custom Patches** | None | switch_core_media.c, switch_rtp.c, mod_avmd.c, mod_httapi.c |
+| **Custom Files** | None | switch_event.c, mod_conference modifications |
+| **Configuration** | Minimal XML | Full production XML with codec prefs |
+| **Build Time** | 15-25 min | 90-150 min |
+| **Image Size** | ~200-300 MB | ~500-800 MB |
+| **Use Case** | Development & Testing | Production Deployment |
 
 ## Adding New Modules
 

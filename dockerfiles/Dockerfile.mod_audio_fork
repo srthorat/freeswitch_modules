@@ -142,6 +142,16 @@ RUN echo "=========================================" \
 # ============================================================================
 # Build Stage 4: mod_audio_fork Module
 # ============================================================================
+# NOTE: This builds vanilla FreeSWITCH with minimal configuration for testing
+# We intentionally exclude:
+#   - Custom patches (switch_core_media.c, switch_rtp.c, etc.) - production only
+#   - Production optimizations (--enable-tcmalloc) - not needed for testing
+#   - Unrelated configure flags (--with-aws, --with-extra) - module doesn't need them
+# We include:
+#   - --with-lws=yes - REQUIRED for mod_audio_fork libwebsockets support
+#   - Minimal modules.conf - only essential modules + mod_audio_fork
+# This ensures faster builds and tests modules against standard FreeSWITCH.
+# ============================================================================
 FROM freeswitch-builder AS module-builder
 
 # Copy only mod_audio_fork module
@@ -187,11 +197,12 @@ EOF
     && echo "✅ modules.conf created with mod_audio_fork enabled" \
     && cat modules.conf \
     && echo "" \
-    && echo "Step 4.3: Configuring FreeSWITCH..." \
+    && echo "Step 4.3: Configuring FreeSWITCH with libwebsockets support..." \
     && ./configure --prefix=/usr/local/freeswitch \
         --enable-core-pgsql-support \
         --disable-core-odbc-support \
-    && echo "✅ Configure complete" \
+        --with-lws=yes \
+    && echo "✅ Configure complete (with libwebsockets support enabled)" \
     && echo "" \
     && echo "Step 4.4: Building FreeSWITCH core with $(nproc) CPU cores..." \
     && make -j $(nproc) \
