@@ -2,6 +2,19 @@
 
 This guide explains how to build and run FreeSWITCH with transcription modules on different platforms.
 
+## Quick Start: Choose Your Platform
+
+| Platform | Build Time | Recommended For | Link |
+|----------|-----------|-----------------|------|
+| **Linux Standalone** | 90-150 min | Production, servers, Linux desktops | [→ Option 1](#option-1-linux-standalone-ubuntudebian) |
+| **GitHub Codespaces** | 60-120 min | Apple Silicon Macs, quick testing | [→ Option 2](#option-2-github-codespaces-recommended-for-apple-silicon) |
+| **MacBook with Docker** | 60-120 min (Intel)<br>2-3 hours (Apple Silicon) | Intel Macs, local development | [→ Option 3](#option-3-macbook-with-docker-local-build) |
+
+**Recommendation:**
+- 🍎 **Apple Silicon (M1/M2/M3)?** → Use **GitHub Codespaces** (faster, easier)
+- 🐧 **Linux server/desktop?** → Use **Linux Standalone** (best performance)
+- 💻 **Intel Mac?** → Use **MacBook with Docker** (native performance)
+
 ---
 
 ## Option 1: Linux Standalone (Ubuntu/Debian)
@@ -109,7 +122,133 @@ sudo /usr/local/freeswitch/bin/freeswitch -nc -nonat -u freeswitch -g freeswitch
 
 ---
 
-## Option 2: MacBook with Docker
+## Option 2: GitHub Codespaces (Recommended for Apple Silicon)
+
+GitHub Codespaces provides a cloud-based Linux development environment, perfect for building Docker images without local emulation overhead.
+
+### Prerequisites
+- GitHub account
+- Repository access to srthorat/freeswitch_modules
+
+### Step 1: Create Codespace
+
+1. **Go to the repository:** https://github.com/srthorat/freeswitch_modules
+2. **Click the green "Code" button**
+3. **Click "Codespaces" tab**
+4. **Click "Create codespace on [branch-name]"**
+   - Or click the "+" to create on current branch
+
+GitHub will provision a cloud VM with:
+- 4 cores, 8GB RAM (free tier)
+- Ubuntu Linux (x86_64)
+- Docker pre-installed
+- VS Code in browser
+
+### Step 2: Build Docker Image in Codespace
+
+Once your Codespace is ready:
+
+```bash
+# You're already in the repository directory
+# Build the Docker image (60-120 minutes)
+./docker-build.sh
+
+# Monitor the build
+# (Codespaces won't timeout during active builds)
+```
+
+### Step 3: Test the Container
+
+```bash
+# Run FreeSWITCH in the Codespace
+docker run -d \
+  --name freeswitch \
+  -p 5060:5060/tcp \
+  -p 5060:5060/udp \
+  -p 8021:8021 \
+  freeswitch-transcribe:latest
+
+# Check logs
+docker logs -f freeswitch
+
+# Access fs_cli
+docker exec -it freeswitch fs_cli
+```
+
+### Step 4: Export Docker Image (Optional)
+
+If you want to use the image locally:
+
+**Option A: Push to Docker Hub**
+```bash
+# Login to Docker Hub
+docker login
+
+# Tag the image
+docker tag freeswitch-transcribe:latest yourusername/freeswitch-transcribe:latest
+
+# Push to Docker Hub
+docker push yourusername/freeswitch-transcribe:latest
+
+# Then pull on your local machine
+docker pull yourusername/freeswitch-transcribe:latest
+```
+
+**Option B: Export to tar file (not recommended - very large)**
+```bash
+# Export image to tar
+docker save freeswitch-transcribe:latest -o freeswitch-transcribe.tar
+
+# Download via browser or gh CLI
+# Note: File will be ~1.5GB+
+```
+
+**Option C: Push to GitHub Container Registry**
+```bash
+# Login to GitHub Container Registry
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+
+# Tag the image
+docker tag freeswitch-transcribe:latest ghcr.io/srthorat/freeswitch-transcribe:latest
+
+# Push to GHCR
+docker push ghcr.io/srthorat/freeswitch-transcribe:latest
+
+# Pull on your local machine
+docker pull ghcr.io/srthorat/freeswitch-transcribe:latest
+```
+
+### Codespace Tips
+
+**Resource Limits:**
+- Free tier: 120 core-hours/month (4-core = 30 hours of usage)
+- Build takes ~1.5-2 hours
+- Codespaces auto-pause after 30 min of inactivity
+
+**Keep Codespace Active:**
+```bash
+# Run this in a terminal to prevent auto-pause during long builds
+while true; do echo "keepalive: $(date)"; sleep 300; done &
+```
+
+**Check Build Progress:**
+```bash
+# In another terminal, monitor Docker
+docker ps
+docker stats
+
+# Check build logs
+tail -f build-logs/batch-*.log
+```
+
+**Delete Codespace When Done:**
+- Go to https://github.com/codespaces
+- Click "..." next to your Codespace
+- Click "Delete"
+
+---
+
+## Option 3: MacBook with Docker (Local Build)
 
 ### Prerequisites
 - macOS 10.15 or later
