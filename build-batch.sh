@@ -374,10 +374,15 @@ applications/mod_deepgram_transcribe
 applications/mod_google_transcribe
 EOF
 
-    # Copy vars_diff.xml if it exists
-    if [ -f "${SCRIPT_DIR}/vars_diff.xml" ]; then
+    # Copy vars_diff.xml and freeswitch.xml if they exist
+    if [ -f "${SCRIPT_DIR}/files/vars_diff.xml" ]; then
         log_info "Copying vars_diff.xml..."
-        cp ${SCRIPT_DIR}/vars_diff.xml autoload_configs/
+        cp ${SCRIPT_DIR}/files/vars_diff.xml autoload_configs/
+    fi
+
+    if [ -f "${SCRIPT_DIR}/files/freeswitch.xml" ]; then
+        log_info "Copying freeswitch.xml..."
+        cp ${SCRIPT_DIR}/files/freeswitch.xml .
     fi
 
     # Copy AWS SDK tarball for FreeSWITCH build system
