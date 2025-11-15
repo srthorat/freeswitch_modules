@@ -91,7 +91,7 @@ RUN git clone --depth 1 -b $FREESWITCH_MODULES_VERSION https://github.com/srthor
 FROM base AS spandsp
 WORKDIR /usr/local/src
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN git clone https://github.com/freeswitch/spandsp.git && cd spandsp && git checkout 0d2e6ac \
+RUN git clone https://github.com/freeswitch/spandsp.git && cd spandsp && git checkout $SPANDSP_VERSION \
     && ./bootstrap.sh && ./configure && make -j ${BUILD_CPUS} && make install
 
 FROM base AS sofia-sip
