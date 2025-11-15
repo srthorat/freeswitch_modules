@@ -2,7 +2,36 @@
 
 A Freeswitch module that generates real-time transcriptions on a Freeswitch channel by using Google's Speech-to-Text API.
 
-Optionally, the connection to the google cloud recognizer can be delayed until voice activity has been detected.  This can be useful in cases where it is desired to minimize the costs of streaming audio for transcription.  This setting is governed by the channel variables starting with 1RECOGNIZER_VAD`, as described below.
+## Features
+
+- Real-time streaming transcription via gRPC
+- High accuracy with automatic punctuation
+- Speaker diarization support
+- Alternative language detection
+- Voice activity detection (VAD) for cost optimization
+- Word-level timing offsets
+- Multiple model options (command and search, phone call, video, default)
+- Enhanced models for premium accuracy
+- Single utterance mode
+- Profanity filtering
+- Phrase hints for domain-specific vocabulary
+
+Optionally, the connection to the Google Cloud recognizer can be delayed until voice activity has been detected. This can be useful in cases where it is desired to minimize the costs of streaming audio for transcription. This setting is governed by the channel variables starting with `RECOGNIZER_VAD`, as described below.
+
+## Dependencies
+
+- **gRPC** - Required for communication with Google Cloud Speech API
+- **protobuf** (Protocol Buffers) - Required for message serialization
+- **Google Cloud Speech API libraries**
+- FreeSWITCH 1.8 or later
+
+## Building
+
+See the main [repository README](../../README.md) for complete build instructions. This module requires FreeSWITCH to be built with gRPC support.
+
+**Recommended:** Use the [ansible-role-fsmrf](https://github.com/drachtio/ansible-role-fsmrf) which handles building gRPC, protobuf, and all dependencies with proper patches.
+
+**Manual build:** Refer to the [gRPC build steps](https://github.com/drachtio/ansible-role-fsmrf/blob/main/tasks/grpc.yml) in the ansible role for detailed instructions on building gRPC and protobuf for FreeSWITCH.
 
 ## API
 
@@ -92,10 +121,163 @@ Additional google speech options can be set through freeswitch channel variables
 
 **google_transcribe::no_audio_detected** - returned when google has not received any audio for some reason.
 
-## Usage
-When using [drachtio-fsrmf](https://www.npmjs.com/package/drachtio-fsmrf), you can access this API command via the api method on the 'endpoint' object.
-```js
-ep.api('uuid_google_transcribe', `${ep.uuid} start en-US`);  
+## Authentication
+
+Google Cloud Speech-to-Text requires authentication via a service account key. Set up authentication by:
+
+1. Create a Google Cloud project and enable the Speech-to-Text API
+2. Create a service account and download the JSON key file
+3. Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to point to the key file:
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 ```
+
+Alternatively, you can use Application Default Credentials (ADC) if running on Google Cloud Platform (GCE, GKE, Cloud Run, etc.).
+
+## Usage
+
+### Using drachtio-fsmrf
+
+When using [drachtio-fsmrf](https://www.npmjs.com/package/drachtio-fsmrf), you can access this API command via the api method on the 'endpoint' object.
+
+```javascript
+// Basic transcription
+ep.api('uuid_google_transcribe', `${ep.uuid} start en-US`);
+
+// With speaker diarization
+await ep.set({
+  GOOGLE_SPEECH_SPEAKER_DIARIZATION: '1',
+  GOOGLE_SPEECH_SPEAKER_DIARIZATION_MIN_SPEAKER_COUNT: '2',
+  GOOGLE_SPEECH_SPEAKER_DIARIZATION_MAX_SPEAKER_COUNT: '4'
+});
+ep.api('uuid_google_transcribe', `${ep.uuid} start en-US interim`);
+
+// With enhanced model and phrase hints
+await ep.set({
+  GOOGLE_SPEECH_MODEL: 'phone_call',
+  GOOGLE_SPEECH_USE_ENHANCED: 'true',
+  GOOGLE_SPEECH_HINTS: 'customer service,technical support,account balance',
+  GOOGLE_SPEECH_ENABLE_AUTOMATIC_PUNCTUATION: 'true'
+});
+ep.api('uuid_google_transcribe', `${ep.uuid} start en-US interim`);
+
+// Stop transcription
+ep.api('uuid_google_transcribe', `${ep.uuid} stop`);
+```
+
+### Using FreeSWITCH Dialplan
+
+```xml
+<extension name="google_transcribe">
+  <condition field="destination_number" expression="^transcribe$">
+    <action application="answer"/>
+    <action application="set" data="GOOGLE_SPEECH_MODEL=phone_call"/>
+    <action application="set" data="GOOGLE_SPEECH_USE_ENHANCED=true"/>
+    <action application="set" data="GOOGLE_SPEECH_ENABLE_AUTOMATIC_PUNCTUATION=true"/>
+    <action application="set" data="GOOGLE_SPEECH_SPEAKER_DIARIZATION=1"/>
+    <action application="uuid_google_transcribe" data="start en-US interim"/>
+    <action application="park"/>
+  </condition>
+</extension>
+```
+
+## Supported Languages
+
+Google Cloud Speech-to-Text supports over 125 languages and variants. Some common ones include:
+
+- **English**: en-US, en-GB, en-AU, en-CA, en-IN, en-NZ
+- **Spanish**: es-ES, es-US, es-MX, es-AR, es-CO
+- **French**: fr-FR, fr-CA, fr-BE, fr-CH
+- **German**: de-DE, de-AT, de-CH
+- **Italian**: it-IT
+- **Portuguese**: pt-BR, pt-PT
+- **Japanese**: ja-JP
+- **Korean**: ko-KR
+- **Chinese**: cmn-Hans-CN (Mandarin Simplified), cmn-Hant-TW (Mandarin Traditional), yue-Hant-HK (Cantonese)
+- **Arabic**: ar-SA, ar-AE, ar-EG
+- **Hindi**: hi-IN
+- **Russian**: ru-RU
+- **Dutch**: nl-NL, nl-BE
+- **Swedish**: sv-SE
+- **Norwegian**: no-NO
+- **Danish**: da-DK
+- **Finnish**: fi-FI
+- **Polish**: pl-PL
+- **Turkish**: tr-TR
+- **Thai**: th-TH
+- **Vietnamese**: vi-VN
+- **Indonesian**: id-ID
+
+For the complete and up-to-date list, see [Google Cloud Speech-to-Text Language Support](https://cloud.google.com/speech-to-text/docs/languages).
+
+## Troubleshooting
+
+### Authentication Issues
+
+If you see authentication errors:
+1. Verify `GOOGLE_APPLICATION_CREDENTIALS` environment variable is set correctly
+2. Check that the service account has the "Cloud Speech-to-Text API User" role
+3. Ensure the Speech-to-Text API is enabled in your Google Cloud project
+4. Verify the service account key file is valid and accessible
+
+### No Transcription Results
+
+If you're not receiving transcription events:
+1. Check FreeSWITCH logs for gRPC connection errors
+2. Verify the language code is supported
+3. Ensure audio is being captured (check media bug attachment)
+4. Verify network connectivity to Google Cloud endpoints
+5. Check if VAD settings are too aggressive (if using `START_RECOGNIZING_ON_VAD`)
+
+### Speaker Diarization Not Working
+
+If speaker labels are not appearing:
+1. Ensure `GOOGLE_SPEECH_SPEAKER_DIARIZATION` is set to "1"
+2. Set appropriate min/max speaker counts with `GOOGLE_SPEECH_SPEAKER_DIARIZATION_MIN_SPEAKER_COUNT` and `GOOGLE_SPEECH_SPEAKER_DIARIZATION_MAX_SPEAKER_COUNT`
+3. Speaker diarization requires sufficient audio with multiple speakers
+4. Not all languages support speaker diarization - check Google's language support documentation
+
+### Poor Transcription Quality
+
+To improve transcription accuracy:
+1. Use the appropriate model for your use case:
+   - `phone_call` - Optimized for telephony audio (8kHz)
+   - `video` - Optimized for video/broadcast content
+   - `command_and_search` - Optimized for short queries
+   - `default` - General purpose
+2. Enable enhanced models with `GOOGLE_SPEECH_USE_ENHANCED: 'true'` for premium accuracy
+3. Use phrase hints for domain-specific vocabulary: `GOOGLE_SPEECH_HINTS: 'term1,term2,term3'`
+4. Ensure good audio quality (clear speech, minimal background noise)
+5. Enable automatic punctuation for better readability
+
+### Max Duration Exceeded
+
+If you receive `google_transcribe::max_duration_exceeded` events:
+1. Google has a 305-second (5 minute) limit per streaming session
+2. Your application should restart the transcription session when this event is received
+3. Implement automatic session restart logic in your application
+
+### Voice Activity Detection (VAD)
+
+To optimize costs by only transcribing when speech is detected:
+```javascript
+await ep.set({
+  START_RECOGNIZING_ON_VAD: '1',
+  RECOGNIZER_VAD_MODE: '2',           // 0-3, higher = more aggressive
+  RECOGNIZER_VAD_VOICE_MS: '250',     // ms of voice needed to start
+  RECOGNIZER_VAD_DEBUG: '1'           // enable debug logging
+});
+```
+
+### Build Issues
+
+If you encounter build errors:
+1. Ensure gRPC and protobuf are built with the correct versions
+2. Verify all dependencies are installed (see ansible role for complete list)
+3. Check that FreeSWITCH can find the gRPC libraries (check LD_LIBRARY_PATH)
+4. The ansible-role-fsmrf includes necessary patches for FreeSWITCH compatibility
+5. Manual builds can be complex - strongly consider using the ansible role
+
 ## Examples
-[google_transcribe.js](../../examples/google_transcribe.js)
+
+[google_transcribe.js](../../examples/google_transcribe.js) - Complete example showing how to use Google transcription with drachtio-fsmrf, including speaker diarization and advanced options.
