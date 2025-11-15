@@ -62,21 +62,32 @@ Build module-specific dependencies (e.g., libwebsockets for mod_audio_fork)
 ### Stage 4: Build FreeSWITCH Core
 Build FreeSWITCH with minimal modules enabled
 
-### Stage 5: Build Target Module
-Build the specific module being tested
-
-### Stage 6: Validation
+### Stage 5: Static Validation
 Validate module compilation and dependencies:
 - Check module file exists
 - Verify dependencies with ldd
 - Check for missing libraries
 - Validate module-specific linkage
 
+### Stage 6: Runtime Validation ⭐ **NEW**
+**Actually runs FreeSWITCH to verify module loads successfully:**
+- Creates minimal FreeSWITCH configuration
+- Starts FreeSWITCH in background
+- Waits for initialization (15 seconds)
+- Checks logs for mod_audio_fork loading
+- Verifies no loading errors
+- Confirms successful module load
+- Checks for critical errors (segfaults, etc.)
+- Stops FreeSWITCH cleanly
+- **Build fails if module doesn't load!**
+
+This stage guarantees that the built image actually works, not just that files exist.
+
 ### Stage 7: Runtime Image
 Create minimal runtime image with:
 - Only runtime dependencies
-- FreeSWITCH binaries
-- Module file
+- FreeSWITCH binaries from **validated build**
+- Module file (proven to load successfully)
 - Validation scripts
 - FreeSWITCH configuration
 
@@ -84,22 +95,28 @@ Create minimal runtime image with:
 
 Each Dockerfile includes multiple validation points:
 
-1. **Build-time Validation**:
-   - Module file exists
-   - Dependencies resolved
-   - No missing libraries
-   - Module-specific libraries linked correctly
+### 1. Static Build-time Validation (Stage 5)
+   - **Point 1**: Module file exists
+   - **Point 2**: Check module dependencies with ldd
+   - **Point 3**: Verify module-specific library linkage (e.g., libwebsockets)
+   - **Point 4**: Check for missing dependencies
+   - **Point 5**: Check FreeSWITCH binary exists
+   - **Point 6**: List all installed modules
 
-2. **Runtime Validation**:
-   - Module can be loaded by FreeSWITCH
-   - No runtime dependency errors
-   - Module appears in FreeSWITCH logs
+### 2. Runtime Validation During Build ⭐ **NEW** (Stage 6)
+   - **Point 7**: Verify mod_audio_fork appears in FreeSWITCH logs
+   - **Point 8**: Check for module loading errors (error/fail/cannot/unable)
+   - **Point 9**: Verify module loaded successfully (load/success/ready)
+   - **Point 10**: Check for critical FreeSWITCH errors (segfault/core dump/fatal)
+   - **Full FreeSWITCH startup log** printed for debugging
+   - **Build fails** if any validation point fails!
 
-3. **Validation Script** (`/validate-module.sh`):
+### 3. Container Runtime Validation Script (`/validate-module.sh`)
    - Checks module file
    - Runs ldd to verify dependencies
    - Starts FreeSWITCH to test module loading
    - Checks FreeSWITCH logs for successful load
+   - Available for testing the final container
 
 ## Adding New Modules
 
