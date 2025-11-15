@@ -326,17 +326,6 @@ applications/mod_google_transcribe
 EOF
     fi
 
-    # Copy vars_diff.xml and freeswitch.xml if they exist
-    if [ -f "${SCRIPT_DIR}/files/vars_diff.xml" ]; then
-        log_info "Copying vars_diff.xml..."
-        cp ${SCRIPT_DIR}/files/vars_diff.xml autoload_configs/
-    fi
-
-    if [ -f "${SCRIPT_DIR}/files/freeswitch.xml" ]; then
-        log_info "Copying freeswitch.xml..."
-        cp ${SCRIPT_DIR}/files/freeswitch.xml .
-    fi
-
     # Prepare AWS SDK tarball for FreeSWITCH build system
     log_info "Preparing AWS SDK tarball..."
     mkdir -p libs/aws-sdk-cpp

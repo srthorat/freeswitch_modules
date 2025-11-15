@@ -161,7 +161,6 @@ RUN cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
     && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
     && cp /tmp/modules.conf.in.extra /usr/local/src/freeswitch/build/modules.conf.in \
     && cp /tmp/modules.conf.vanilla.xml.extra /usr/local/src/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml \
-    && cp /tmp/avmd.conf.xml /usr/local/src/freeswitch/conf/vanilla/autoload_configs/avmd_conf.xml \
     && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
     && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src  \
     && cp /tmp/mod_avmd.c.patch /usr/local/src/freeswitch/src/mod/applications/mod_avmd \
@@ -186,14 +185,6 @@ RUN cd /usr/local/src/freeswitch \
     && make -j ${BUILD_CPUS} \
     && make install
 RUN cd /usr/local/src/freeswitch \
-    && cp /tmp/acl.conf.xml /usr/local/freeswitch/conf/autoload_configs \
-    && cp /tmp/event_socket.conf.xml /usr/local/freeswitch/conf/autoload_configs \
-    && cp /tmp/switch.conf.xml /usr/local/freeswitch/conf/autoload_configs \
-    && cp /tmp/conference.conf.xml /usr/local/freeswitch/conf/autoload_configs \
-    && rm -Rf /usr/local/freeswitch/conf/dialplan/* \
-    && rm -Rf /usr/local/freeswitch/conf/sip_profiles/* \
-    && cp /tmp/dialplan/* /usr/local/freeswitch/conf/dialplan/ \
-    && cp /tmp/sip_profiles/* /usr/local/freeswitch/conf/sip_profiles/ \
     && cp /usr/local/src/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml /usr/local/freeswitch/conf/autoload_configs \
 	  && sed -i -e 's/global_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/global_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml \
 	  && sed -i -e 's/outbound_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/outbound_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml
@@ -258,9 +249,6 @@ ENV PATH="/usr/local/freeswitch/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
 COPY ./entrypoint.sh /entrypoint.sh
-COPY ./files/vars_diff.xml  /usr/local/freeswitch/conf/vars_diff.xml
-COPY ./files/freeswitch.xml /usr/local/freeswitch/conf/freeswitch.xml
-
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
