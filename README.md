@@ -6,7 +6,8 @@ A collection of production-ready FreeSWITCH modules for real-time speech-to-text
 
 | Module | Provider | Protocol | Key Features |
 |--------|----------|----------|--------------|
-| [mod_audio_fork](modules/mod_audio_fork/) | Generic | WebSocket | Stream audio to external services |
+| [mod_audio_fork](modules/mod_audio_fork/) | Generic | WebSocket (libwebsockets) | Stream audio to external services |
+| [mod_audio_stream](modules/mod_audio_stream/) | Generic | WebSocket (libwsc) | Bidirectional audio streaming, pause/resume |
 | [mod_aws_transcribe](modules/mod_aws_transcribe/) | AWS | Native SDK | Streaming transcription, speaker diarization |
 | [mod_azure_transcribe](modules/mod_azure_transcribe/) | Azure | WebSocket | Real-time transcription, language detection |
 | [mod_deepgram_transcribe](modules/mod_deepgram_transcribe/) | Deepgram | WebSocket | Fast transcription, keyword boosting |
@@ -39,13 +40,13 @@ Choose your build method:
 **Features:**
 - Isolated, reproducible builds
 - Optimized container (~500MB)
-- All 5 modules included
+- All 6 modules included
 - **Automated validation** - Build fails if modules missing or have dependency issues
 - Production-ready
 
 **Build validation:**
-During the Docker build, all transcription modules are automatically validated:
-- ✓ Verifies all 5 module .so files exist
+During the Docker build, all modules are automatically validated:
+- ✓ Verifies all 6 module .so files exist
 - ✓ Checks dependencies with `ldd` (no missing libraries)
 - ✓ Build fails immediately if any module has issues
 

@@ -519,7 +519,7 @@ batch_7() {
         log_info "Checking if FreeSWITCH and modules are already installed..."
 
         MODULE_DIR="/usr/local/freeswitch/mod"
-        MODULES_TO_CHECK=("mod_audio_fork" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
+        MODULES_TO_CHECK=("mod_audio_fork" "mod_audio_stream" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
         ALL_MODULES_EXIST=true
 
         for module in "${MODULES_TO_CHECK[@]}"; do
@@ -560,6 +560,7 @@ batch_7() {
     log_info "Adding modules to modules.conf..."
     cat >> modules.conf <<EOF
 applications/mod_audio_fork
+applications/mod_audio_stream
 applications/mod_aws_transcribe
 applications/mod_azure_transcribe
 applications/mod_deepgram_transcribe
@@ -614,7 +615,7 @@ EOF
     # Verify modules were built
     log_info "Verifying modules..."
     MODULE_DIR="/usr/local/freeswitch/mod"
-    MODULES_TO_CHECK=("mod_audio_fork" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
+    MODULES_TO_CHECK=("mod_audio_fork" "mod_audio_stream" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
 
     ALL_MODULES_EXIST=true
     for module in "${MODULES_TO_CHECK[@]}"; do

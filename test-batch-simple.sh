@@ -316,6 +316,7 @@ batch_7() {
     if ! grep -q "mod_audio_fork" modules.conf; then
         cat >> modules.conf <<EOF
 applications/mod_audio_fork
+applications/mod_audio_stream
 applications/mod_aws_transcribe
 applications/mod_azure_transcribe
 applications/mod_deepgram_transcribe

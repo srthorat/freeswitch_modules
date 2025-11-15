@@ -186,7 +186,7 @@ RUN echo "=========================================" \
     && echo "Validating transcription modules..." \
     && echo "=========================================" \
     && MODULE_DIR="/usr/local/freeswitch/mod" \
-    && MODULES="mod_audio_fork mod_aws_transcribe mod_azure_transcribe mod_deepgram_transcribe mod_google_transcribe" \
+    && MODULES="mod_audio_fork mod_audio_stream mod_aws_transcribe mod_azure_transcribe mod_deepgram_transcribe mod_google_transcribe" \
     && VALIDATION_FAILED=0 \
     && echo "" \
     && echo "Step 1: Checking module files exist..." \
