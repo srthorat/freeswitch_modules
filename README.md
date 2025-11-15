@@ -21,8 +21,7 @@ Choose your build method:
 | Script | Best For | Time | Location |
 |--------|----------|------|----------|
 | `./build-locally.sh` | Production/CI/CD | 60-90 min | Docker container |
-| `sudo ./build-local-system.sh` | Development/Testing | 60-120 min | /usr/local/freeswitch |
-| `sudo ./build-batch.sh all` | Learning/Debugging | 75-130 min | /usr/local/src |
+| `sudo ./build-batch.sh all` | Production standalone | 75-130 min | /usr/local/src |
 | `sudo ./test-batch-simple.sh all` | Testing/Validation | 75-130 min | /tmp/freeswitch-build |
 
 ---
@@ -56,9 +55,9 @@ docker run -d \
 
 ---
 
-### Option 2: Native System Build
+### Option 2: Batch Build (Production Standalone)
 
-**Best for:** Development, testing, local setup
+**Best for:** Production standalone builds, learning dependencies, debugging
 
 **Prerequisites:**
 - Ubuntu 20.04/22.04/24.04 or Debian 11
@@ -66,34 +65,6 @@ docker run -d \
 - 20GB+ free disk space
 - 8GB+ RAM
 - 4+ CPU cores
-
-**Build:**
-```bash
-sudo ./build-local-system.sh
-```
-
-**What it does:**
-1. Installs system dependencies
-2. Builds CMake 3.28.3
-3. Builds gRPC 1.64.2 + Protocol Buffers
-4. Builds googleapis for Google Cloud
-5. Builds libwebsockets 4.3.3
-6. Installs Azure Speech SDK 1.37.0
-7. Builds spandsp, sofia-sip 1.13.17, libfvad
-8. Builds AWS SDK C++ 1.11.345
-9. Builds FreeSWITCH 1.10.11
-10. Copies and builds all 5 modules
-11. Verifies all modules load correctly
-
-**Duration:** 60-120 minutes
-
-**Output:** FreeSWITCH installed at `/usr/local/freeswitch/`
-
----
-
-### Option 3: Incremental Batch Build
-
-**Best for:** Learning dependencies, debugging, first-time builds
 
 **Build all batches:**
 ```bash
@@ -115,13 +86,28 @@ sudo ./build-batch.sh 7  # FreeSWITCH + Modules (20-30 min)
 - Catch errors early (fail fast)
 - Resume from last successful batch
 - Understand dependencies step-by-step
-- Faster iteration during development
+- Production-ready standalone builds
 
-**Total time:** 75-130 minutes
+**What it does:**
+1. Installs system dependencies
+2. Builds CMake 3.28.3
+3. Builds gRPC 1.64.2 + Protocol Buffers
+4. Builds googleapis for Google Cloud
+5. Builds libwebsockets 4.3.3
+6. Installs Azure Speech SDK 1.37.0
+7. Builds spandsp, sofia-sip 1.13.17, libfvad
+8. Builds AWS SDK C++ 1.11.345
+9. Builds FreeSWITCH 1.10.11
+10. Copies and builds all 5 modules
+11. Verifies all modules load correctly
+
+**Duration:** 75-130 minutes
+
+**Output:** FreeSWITCH installed at `/usr/local/freeswitch/`
 
 ---
 
-### Option 4: Simplified Test Build
+### Option 3: Simplified Test Build
 
 **Best for:** Testing without apt-get, validation
 
@@ -143,14 +129,14 @@ sudo ./test-batch-simple.sh 6
 
 ## Build Scripts Comparison
 
-| Feature | Docker | Native | Batch | Test |
-|---------|--------|--------|-------|------|
-| Install system packages | ✓ | ✓ | ✓ | ✗ |
-| Requires root | ✓ | ✓ | ✓ | ✓* |
-| Build location | Container | /usr/local | /usr/local/src | /tmp |
-| Resume capability | ✗ | ✗ | ✓ | ✓ |
-| Module verification | ✓ | ✓ | ✓ | ✓ |
-| Production ready | ✓ | ✓ | ✓ | ✗ |
+| Feature | Docker | Batch | Test |
+|---------|--------|-------|------|
+| Install system packages | ✓ | ✓ | ✗ |
+| Requires root | ✓ | ✓ | ✓* |
+| Build location | Container | /usr/local/src | /tmp |
+| Resume capability | ✗ | ✓ | ✓ |
+| Module verification | ✓ | ✓ | ✓ |
+| Production ready | ✓ | ✓ | ✗ |
 
 *Only for `make install` and `ldconfig`
 
