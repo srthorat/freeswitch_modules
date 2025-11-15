@@ -198,6 +198,51 @@ RUN cd /usr/local/src/freeswitch \
 	  && sed -i -e 's/global_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/global_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml \
 	  && sed -i -e 's/outbound_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/outbound_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml
 
+# Validate transcription modules
+RUN echo "=========================================" \
+    && echo "Validating transcription modules..." \
+    && echo "=========================================" \
+    && MODULE_DIR="/usr/local/freeswitch/mod" \
+    && MODULES="mod_audio_fork mod_aws_transcribe mod_azure_transcribe mod_deepgram_transcribe mod_google_transcribe" \
+    && VALIDATION_FAILED=0 \
+    && echo "" \
+    && echo "Step 1: Checking module files exist..." \
+    && for module in $MODULES; do \
+        if [ -f "$MODULE_DIR/${module}.so" ]; then \
+            echo "  ✓ ${module}.so found"; \
+        else \
+            echo "  ✗ ${module}.so NOT FOUND"; \
+            VALIDATION_FAILED=1; \
+        fi; \
+    done \
+    && echo "" \
+    && echo "Step 2: Checking module dependencies..." \
+    && for module in $MODULES; do \
+        echo "  Checking ${module}..."; \
+        if ldd "$MODULE_DIR/${module}.so" | grep -q "not found"; then \
+            echo "  ✗ ${module} has missing dependencies:"; \
+            ldd "$MODULE_DIR/${module}.so" | grep "not found"; \
+            VALIDATION_FAILED=1; \
+        else \
+            echo "  ✓ ${module} dependencies OK"; \
+        fi; \
+    done \
+    && echo "" \
+    && if [ $VALIDATION_FAILED -eq 1 ]; then \
+        echo "=========================================" \
+        && echo "❌ MODULE VALIDATION FAILED" \
+        && echo "=========================================" \
+        && exit 1; \
+    else \
+        echo "=========================================" \
+        && echo "✅ ALL MODULES VALIDATED SUCCESSFULLY" \
+        && echo "=========================================" \
+        && echo "Modules built and ready:"; \
+        for module in $MODULES; do \
+            echo "  - ${module}"; \
+        done; \
+    fi
+
 FROM debian:bullseye-slim AS final
 ARG TARGETARCH
 ENV LIB_DIR=/usr/lib/x86_64-linux-gnu

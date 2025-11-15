@@ -40,7 +40,14 @@ Choose your build method:
 - Isolated, reproducible builds
 - Optimized container (~500MB)
 - All 5 modules included
+- **Automated validation** - Build fails if modules missing or have dependency issues
 - Production-ready
+
+**Build validation:**
+During the Docker build, all transcription modules are automatically validated:
+- ✓ Verifies all 5 module .so files exist
+- ✓ Checks dependencies with `ldd` (no missing libraries)
+- ✓ Build fails immediately if any module has issues
 
 **Run the container:**
 ```bash
