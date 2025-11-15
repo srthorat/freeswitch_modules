@@ -134,10 +134,27 @@ The Dockerfile uses local files (modules, patches, configs) from your current di
 
 ```bash
 # Build the Docker image (this takes 60-120 minutes)
-docker build -t freeswitch-transcribe:latest .
+./docker-build.sh
+
+# Or specify a custom image name
+./docker-build.sh my-freeswitch:v1.0
 ```
 
-**Note:** The build automatically reads version configuration from the `.env` file.
+The `docker-build.sh` script automatically reads version configuration from the `.env` file and passes them as build arguments to Docker.
+
+**Advanced: Manual build** (if you prefer not to use the script):
+```bash
+docker build \
+  --build-arg CMAKE_VERSION=3.26.4 \
+  --build-arg GRPC_VERSION=1.56.2 \
+  --build-arg LIBWEBSOCKETS_VERSION=4.3.2 \
+  --build-arg SPEECH_SDK_VERSION=1.37.0 \
+  --build-arg SPANDSP_VERSION=3.0.0 \
+  --build-arg SOFIA_VERSION=1.13.17 \
+  --build-arg AWS_SDK_CPP_VERSION=1.11.160 \
+  --build-arg FREESWITCH_VERSION=1.10.11 \
+  -t freeswitch-transcribe:latest .
+```
 
 The Dockerfile:
 - Uses multi-stage build for optimization
@@ -257,7 +274,20 @@ sudo ./build-batch.sh 7 --clean  # Clean only FreeSWITCH
 docker rmi freeswitch-transcribe:latest
 
 # Build fresh (no cache)
-docker build --no-cache -t freeswitch-transcribe:latest .
+# Note: Add --no-cache flag to docker-build.sh if needed
+docker build --no-cache \
+  --build-arg CMAKE_VERSION=$(grep cmakeVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg GRPC_VERSION=$(grep grpcVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg LIBWEBSOCKETS_VERSION=$(grep libwebsocketsVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg SPEECH_SDK_VERSION=$(grep speechSdkVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg SPANDSP_VERSION=$(grep spandspVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg SOFIA_VERSION=$(grep sofiaVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg AWS_SDK_CPP_VERSION=$(grep awsSdkCppVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  --build-arg FREESWITCH_VERSION=$(grep freeswitchVersion .env | awk -F '=' '{print $2}' | awk '{print $1}') \
+  -t freeswitch-transcribe:latest .
+
+# Or simply rebuild with the script (uses cache)
+./docker-build.sh
 ```
 
 ---
@@ -326,19 +356,31 @@ This removes:
 
 ### Docker Issues
 
-1. **Check Docker logs:**
+1. **Build fails with "404 Not Found" or empty versions:**
+
+   This means build arguments aren't being passed. Always use `docker-build.sh`:
+   ```bash
+   ./docker-build.sh
+   ```
+
+   Or manually pass all build args (see "Advanced: Manual build" section above).
+
+2. **Check Docker logs:**
    ```bash
    docker logs freeswitch
    ```
 
-2. **Inspect container:**
+3. **Inspect container:**
    ```bash
    docker exec -it freeswitch bash
    ```
 
-3. **Rebuild without cache:**
+4. **Rebuild without cache:**
+
+   First remove the old image, then rebuild:
    ```bash
-   docker build --no-cache -t freeswitch-transcribe:latest .
+   docker rmi freeswitch-transcribe:latest
+   ./docker-build.sh
    ```
 
 ---
