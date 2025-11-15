@@ -39,121 +39,118 @@ These modules require a **custom build of FreeSWITCH** with additional dependenc
 
 ## Building
 
-### Option 1: Using Ansible (Recommended)
+This repository provides **4 build scripts** for different use cases:
 
-The easiest way to build FreeSWITCH with these modules is using the [drachtio/ansible-role-fsmrf](https://github.com/drachtio/ansible-role-fsmrf) Ansible role:
+### Quick Start: Choose Your Build Method
 
-```bash
-# Clone the ansible role
-git clone https://github.com/drachtio/ansible-role-fsmrf.git
+| Script | Use Case | Time | Best For |
+|--------|----------|------|----------|
+| `build-locally.sh` | Docker build | 60-90 min | Production deployment, CI/CD |
+| `build-local-system.sh` | Full system build | 60-120 min | Development, testing, local setup |
+| `build-batch.sh` | Incremental batch build | 75-130 min | Learning, debugging, first-time builds |
+| `test-batch-simple.sh` | Simplified testing | 75-130 min | Testing without apt-get, validation |
 
-# Review the role's tasks to understand the build process
-cat ansible-role-fsmrf/tasks/*.yml
+---
 
-# Use in your playbook
-```
+### Option 1: Docker Build (Recommended for Production)
 
-This role handles:
-- Installing all dependencies
-- Applying necessary patches
-- Building FreeSWITCH with module support
-- Installing and configuring modules
-
-**Note:** The ansible role assumes Debian 9 (stretch) as the target OS.
-
-### Option 2: Manual Build
-
-If you prefer not to use Ansible, you can follow the build steps manually:
-
-#### 1. Build AWS C++ SDK (for mod_aws_transcribe)
+Build a complete Docker container with all modules:
 
 ```bash
-# Install dependencies
-apt-get install -y libcurl4-openssl-dev libssl-dev cmake build-essential
-
-# Clone and build AWS SDK
-git clone --depth 1 --branch 1.11.200 https://github.com/aws/aws-sdk-cpp.git
-cd aws-sdk-cpp
-git submodule update --init --recursive
-
-mkdir build && cd build
-cmake .. \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_ONLY="transcribestreaming" \
-  -DENABLE_TESTING=OFF \
-  -DCMAKE_INSTALL_PREFIX=/usr/local
-
-make -j$(nproc)
-make install
-ldconfig
+./build-locally.sh
 ```
 
-For detailed AWS SDK build instructions, see: https://github.com/drachtio/ansible-role-fsmrf/blob/main/tasks/grpc.yml#L28
+**Features:**
+- Optimized container (~500MB final size)
+- Isolated, reproducible builds
+- All 5 transcription modules included
+- Production-ready
 
-#### 2. Build gRPC and protobuf (for mod_google_transcribe)
+**Documentation:** See [DOCKER_BUILD_GUIDE.md](DOCKER_BUILD_GUIDE.md)
+
+---
+
+### Option 2: Native System Build
+
+Build FreeSWITCH directly on your system (Ubuntu 20.04/22.04/24.04 or Debian 11):
 
 ```bash
-# Follow the official gRPC build instructions
-# Or refer to: https://github.com/drachtio/ansible-role-fsmrf/blob/main/tasks/grpc.yml
+sudo ./build-local-system.sh
 ```
 
-#### 3. Install libwebsockets (for mod_audio_fork)
+**Features:**
+- Installs to `/usr/local/freeswitch/`
+- All dependencies installed system-wide
+- Automatic module verification
+- Full build in one command
+
+**Duration:** 60-120 minutes
+**Documentation:** See [BUILD.md](BUILD.md)
+
+---
+
+### Option 3: Incremental Batch Build (Recommended for Learning)
+
+Build in 7 independent batches for better error detection and debugging:
 
 ```bash
-apt-get install -y libwebsockets-dev
+# Run all batches sequentially
+sudo ./build-batch.sh all
+
+# Or run individual batches
+sudo ./build-batch.sh 1  # CMake
+sudo ./build-batch.sh 2  # gRPC + Protobuf
+sudo ./build-batch.sh 3  # googleapis + libwebsockets
+sudo ./build-batch.sh 4  # Azure Speech SDK
+sudo ./build-batch.sh 5  # spandsp + sofia-sip + libfvad
+sudo ./build-batch.sh 6  # AWS SDK C++
+sudo ./build-batch.sh 7  # FreeSWITCH + Modules
 ```
 
-#### 4. Build FreeSWITCH
+**Features:**
+- Catch errors early (fail fast)
+- Resume from last successful batch
+- Understand dependencies
+- Faster iteration during development
+
+**Documentation:** See [INCREMENTAL_BUILD_GUIDE.md](INCREMENTAL_BUILD_GUIDE.md)
+
+---
+
+### Option 4: Simplified Test Build
+
+Test the build process without installing system packages:
 
 ```bash
-# Clone FreeSWITCH
-git clone https://github.com/signalwire/freeswitch.git
-cd freeswitch
+# Run specific batch (requires sudo for make install)
+sudo ./test-batch-simple.sh 1
 
-# Apply patches from ansible role
-# See: https://github.com/drachtio/ansible-role-fsmrf/tree/main/files
-
-# Configure and build
-./bootstrap.sh
-./configure
-make -j$(nproc)
-make install
+# Or run all batches
+sudo ./test-batch-simple.sh all
 ```
 
-#### 5. Build and Install Modules
+**Features:**
+- Builds in `/tmp/freeswitch-build/`
+- No apt-get calls (skips package installation)
+- Useful for testing on systems where you can't install packages
+- Requires root only for `make install` and `ldconfig`
 
-```bash
-# Copy modules to FreeSWITCH source
-cp -r modules/mod_* /usr/src/freeswitch/src/mod/applications/
+**Documentation:** See [INCREMENTAL_BUILD_GUIDE.md](INCREMENTAL_BUILD_GUIDE.md#scripts-available)
 
-# Add modules to modules.conf
-echo "applications/mod_audio_fork" >> /usr/src/freeswitch/modules.conf
-echo "applications/mod_aws_transcribe" >> /usr/src/freeswitch/modules.conf
-# ... add other modules
+---
 
-# Build modules
-cd /usr/src/freeswitch
-make mod_audio_fork-install
-make mod_aws_transcribe-install
-# ... build other modules
-```
+### Build Scripts Comparison
 
-### Option 3: Using Docker
+| Feature | Docker | Native | Batch | Test |
+|---------|--------|--------|-------|------|
+| Install system packages | ✓ | ✓ | ✓ | ✗ |
+| Requires root | ✓ | ✓ | ✓ | ✓* |
+| Build location | Container | /usr/local | /usr/local/src | /tmp |
+| Resume capability | ✗ | ✗ | ✓ | ✓ |
+| Module verification | ✓ | ✓ | ✓ | ✓ |
+| Production ready | ✓ | ✓ | ✓ | ✗ |
 
-Pre-built Docker images are available with most modules:
-
-```bash
-# Pull the image (includes all modules except mod_aws_transcribe)
-docker pull drachtio/drachtio-freeswitch-mrf:v1.10.1-full
-
-# Run
-docker run -d \
-  --name freeswitch \
-  --network host \
-  drachtio/drachtio-freeswitch-mrf:v1.10.1-full
-```
-
-**Note:** The Docker image does not include `mod_aws_transcribe` due to licensing considerations.
+*Only for `make install` and `ldconfig`
 
 ## Configuration
 
