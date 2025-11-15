@@ -357,11 +357,12 @@ EOF
 
 RUN echo "✅ modules.conf.xml created" \
     && echo "" \
-    && echo "Starting FreeSWITCH to test module loading..." \
-    && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
+    && echo "Starting FreeSWITCH to test module loading..."
+
+# Start FreeSWITCH in background and capture PID
+RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
     && export PATH=/usr/local/freeswitch/bin:$PATH \
-    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-validation.log 2>&1 & \
-    && FS_PID=$! \
+    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-validation.log 2>&1 & FS_PID=$! \
     && echo "FreeSWITCH started with PID: $FS_PID" \
     && sleep 15 \
     && echo "" \
