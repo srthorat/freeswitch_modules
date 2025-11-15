@@ -37,3 +37,6 @@ node_modules
 *.retry
 .vscode
 stubs/*
+
+# Build logs
+build-logs/

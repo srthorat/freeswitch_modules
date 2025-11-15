@@ -2,9 +2,28 @@
 set -e
 
 # Build FreeSWITCH in batches for incremental verification
-# Usage: sudo ./build-batch.sh [batch_number]
-# Example: sudo ./build-batch.sh 1    # Run only batch 1
-#          sudo ./build-batch.sh all   # Run all batches
+# Usage: sudo ./build-batch.sh [batch_number] [options]
+# Example: sudo ./build-batch.sh 1           # Run only batch 1
+#          sudo ./build-batch.sh all         # Run all batches
+#          sudo ./build-batch.sh all --clean # Clean rebuild all batches
+#          sudo ./build-batch.sh -h          # Show help
+
+# Parse options
+CLEAN_MODE=false
+SHOW_HELP=false
+
+for arg in "$@"; do
+    case $arg in
+        --clean)
+            CLEAN_MODE=true
+            shift
+            ;;
+        -h|--help)
+            SHOW_HELP=true
+            shift
+            ;;
+    esac
+done
 
 # Color output
 log_info() {
@@ -18,6 +37,42 @@ log_error() {
 log_success() {
     echo "[SUCCESS] $1"
 }
+
+# Show help
+if [ "$SHOW_HELP" = true ]; then
+    cat <<EOF
+FreeSWITCH Batch Build Script
+=============================
+
+Usage: sudo $0 [BATCH] [OPTIONS]
+
+BATCH:
+  1       - System Dependencies + CMake (5-10 min)
+  2       - gRPC + Protocol Buffers (15-30 min)
+  3       - googleapis + libwebsockets (5-10 min)
+  4       - Azure Speech SDK (1-2 min)
+  5       - spandsp + sofia-sip + libfvad (10-15 min)
+  6       - AWS SDK C++ + AWS C Common (20-40 min)
+  7       - FreeSWITCH + Modules (20-30 min)
+  all     - Run all batches sequentially
+
+OPTIONS:
+  --clean        Force clean rebuild (removes existing build directories)
+  -h, --help     Show this help message
+
+EXAMPLES:
+  sudo $0 1                # Build batch 1 (incremental)
+  sudo $0 all              # Build all batches (incremental)
+  sudo $0 all --clean      # Clean rebuild all batches
+  sudo $0 7 --clean        # Clean rebuild only batch 7
+
+LOGS:
+  Build logs are saved to: build-logs/batch-N.log
+  Combined log for 'all': build-logs/build-all.log
+
+EOF
+    exit 0
+fi
 
 # Check if script is run as root
 if [ "$EUID" -ne 0 ]; then
@@ -51,9 +106,15 @@ BUILD_DIR="/usr/local/src"
 BUILD_CPUS=$(nproc)
 export LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
+# Setup build logs directory
+LOGS_DIR="${SCRIPT_DIR}/build-logs"
+mkdir -p "$LOGS_DIR"
+
 log_info "Build configuration:"
 log_info "  Build directory: $BUILD_DIR"
 log_info "  Build CPUs: $BUILD_CPUS"
+log_info "  Logs directory: $LOGS_DIR"
+log_info "  Clean mode: $CLEAN_MODE"
 log_info "  CMake: $CMAKE_VERSION"
 log_info "  gRPC: $GRPC_VERSION"
 log_info "  libwebsockets: $LIBWEBSOCKETS_VERSION"
@@ -61,15 +122,71 @@ log_info "  Speech SDK: $SPEECH_SDK_VERSION"
 log_info "  AWS SDK C++: $AWS_SDK_CPP_VERSION"
 log_info "  FreeSWITCH: $FREESWITCH_VERSION"
 
+# Clean mode function
+clean_batch() {
+    local batch=$1
+    log_info "Clean mode enabled for batch $batch"
+
+    case $batch in
+        1)
+            rm -rf "$BUILD_DIR/cmake-$CMAKE_VERSION" "$BUILD_DIR/cmake-$CMAKE_VERSION.tar.gz"
+            log_info "  Cleaned: CMake"
+            ;;
+        2)
+            rm -rf "$BUILD_DIR/grpc"
+            log_info "  Cleaned: gRPC"
+            ;;
+        3)
+            rm -rf "$BUILD_DIR/googleapis" "$BUILD_DIR/libwebsockets"
+            log_info "  Cleaned: googleapis, libwebsockets"
+            ;;
+        4)
+            rm -rf /usr/local/include/MicrosoftSpeechSDK /usr/local/lib/MicrosoftSpeechSDK /usr/local/lib/libMicrosoft.*.so
+            log_info "  Cleaned: Azure Speech SDK"
+            ;;
+        5)
+            rm -rf "$BUILD_DIR/spandsp" "$BUILD_DIR/sofia-sip" "$BUILD_DIR/libfvad"
+            log_info "  Cleaned: spandsp, sofia-sip, libfvad"
+            ;;
+        6)
+            rm -rf "$BUILD_DIR/aws-sdk-cpp" "$BUILD_DIR/aws-c-common"
+            log_info "  Cleaned: AWS SDK C++, AWS C Common"
+            ;;
+        7)
+            rm -rf "$BUILD_DIR/freeswitch" /usr/local/freeswitch
+            log_info "  Cleaned: FreeSWITCH"
+            ;;
+        all)
+            log_info "  Cleaning all batches..."
+            clean_batch 1
+            clean_batch 2
+            clean_batch 3
+            clean_batch 4
+            clean_batch 5
+            clean_batch 6
+            clean_batch 7
+            ;;
+    esac
+}
+
 cd $BUILD_DIR
 
 # =============================================================================
 # BATCH 1: System Dependencies + CMake
 # =============================================================================
 batch_1() {
+    local LOG_FILE="$LOGS_DIR/batch-1.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 1: System Dependencies + CMake"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 1
+    fi
 
     log_info "Step 1.1: Installing system dependencies..."
     for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done
@@ -113,9 +230,18 @@ batch_1() {
 # BATCH 2: gRPC + Protocol Buffers
 # =============================================================================
 batch_2() {
+    local LOG_FILE="$LOGS_DIR/batch-2.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 2: gRPC + Protocol Buffers"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 2
+    fi
 
     log_info "Step 2.1: Building gRPC $GRPC_VERSION..."
     cd $BUILD_DIR
@@ -149,9 +275,18 @@ batch_2() {
 # BATCH 3: googleapis + libwebsockets
 # =============================================================================
 batch_3() {
+    local LOG_FILE="$LOGS_DIR/batch-3.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 3: googleapis + libwebsockets"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 3
+    fi
 
     log_info "Step 3.1: Building googleapis..."
     cd $BUILD_DIR
@@ -191,9 +326,18 @@ batch_3() {
 # BATCH 4: Azure Speech SDK
 # =============================================================================
 batch_4() {
+    local LOG_FILE="$LOGS_DIR/batch-4.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 4: Azure Speech SDK"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 4
+    fi
 
     log_info "Downloading and installing Azure Speech SDK (latest)..."
     if [ ! -d "/usr/local/include/MicrosoftSpeechSDK" ]; then
@@ -223,9 +367,18 @@ batch_4() {
 # BATCH 5: spandsp + sofia-sip + libfvad
 # =============================================================================
 batch_5() {
+    local LOG_FILE="$LOGS_DIR/batch-5.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 5: spandsp + sofia-sip + libfvad"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 5
+    fi
 
     log_info "Step 5.1: Building spandsp..."
     cd $BUILD_DIR
@@ -286,9 +439,18 @@ batch_5() {
 # BATCH 6: AWS SDK C++ + AWS C Common
 # =============================================================================
 batch_6() {
+    local LOG_FILE="$LOGS_DIR/batch-6.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 6: AWS SDK C++ + AWS C Common"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 6
+    fi
 
     log_info "Step 6.1: Building AWS SDK C++ $AWS_SDK_CPP_VERSION..."
     cd $BUILD_DIR
@@ -339,9 +501,42 @@ batch_6() {
 # BATCH 7: FreeSWITCH + Modules
 # =============================================================================
 batch_7() {
+    local LOG_FILE="$LOGS_DIR/batch-7.log"
+    exec > >(tee "$LOG_FILE") 2>&1
+
     log_info "========================================="
     log_info "BATCH 7: FreeSWITCH + Modules"
     log_info "========================================="
+    log_info "Log file: $LOG_FILE"
+
+    # Clean if requested
+    if [ "$CLEAN_MODE" = true ]; then
+        clean_batch 7
+    fi
+
+    # Check if FreeSWITCH is already installed and all modules exist
+    if [ "$CLEAN_MODE" = false ] && [ -f "/usr/local/freeswitch/bin/freeswitch" ]; then
+        log_info "Checking if FreeSWITCH and modules are already installed..."
+
+        MODULE_DIR="/usr/local/freeswitch/mod"
+        MODULES_TO_CHECK=("mod_audio_fork" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
+        ALL_MODULES_EXIST=true
+
+        for module in "${MODULES_TO_CHECK[@]}"; do
+            if [ ! -f "$MODULE_DIR/${module}.so" ]; then
+                ALL_MODULES_EXIST=false
+                break
+            fi
+        done
+
+        if [ "$ALL_MODULES_EXIST" = true ]; then
+            log_success "FreeSWITCH and all modules already installed, skipping build"
+            log_success "BATCH 7 COMPLETED: FreeSWITCH is ready!"
+            return 0
+        else
+            log_info "Some modules missing, will rebuild FreeSWITCH"
+        fi
+    fi
 
     log_info "Building FreeSWITCH $FREESWITCH_VERSION with transcription modules..."
     cd $BUILD_DIR
@@ -481,6 +676,11 @@ case "$BATCH" in
         batch_7
         ;;
     all)
+        # Log all batches to a combined file
+        LOG_FILE="$LOGS_DIR/build-all.log"
+        exec > >(tee "$LOG_FILE") 2>&1
+        log_info "Running all batches - combined log: $LOG_FILE"
+
         batch_1
         batch_2
         batch_3
