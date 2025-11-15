@@ -56,25 +56,36 @@ Install system packages required for building
 ### Stage 2: Build CMake
 Build CMake from source (required for some dependencies)
 
-### Stage 3: Build Module Dependencies
-Build module-specific dependencies (e.g., libwebsockets for mod_audio_fork)
+### Stage 3: Build FreeSWITCH Core Dependencies
+Build FreeSWITCH dependencies (same as production):
+- spandsp (FreeSWITCH dependency)
+- sofia-sip (FreeSWITCH dependency)
+- libfvad (FreeSWITCH dependency)
 
-### Stage 4: Build FreeSWITCH Core
-Build FreeSWITCH **IDENTICALLY to production** with all patches and custom files
+### Stage 4: Build Module-Specific Dependencies
+Build only the dependencies needed by the specific module:
+- For mod_audio_fork: libwebsockets v4.3.3
+- Skips: gRPC, AWS SDK, Azure SDK (not needed by mod_audio_fork)
+
+### Stage 5: Build FULL Production FreeSWITCH from Source
+**This is a COMPLETE production build from source, NOT minimal!**
+- Clones FreeSWITCH v1.10.11 source code
 - Applies ALL production patches (switch_core_media.c, switch_rtp.c, mod_avmd.c, mod_httapi.c)
-- Copies ALL custom files (switch_event.c, mod_conference modifications, configure.ac.extra, etc.)
+- Copies ALL custom files (switch_event.c, mod_conference.h, configure.ac.extra, Makefile.am.extra, etc.)
+- Runs `./bootstrap.sh -j` (same as production)
 - Uses production configure flags: `--enable-tcmalloc=yes --with-lws=yes --with-extra=yes --with-aws=no`
-- Applies production codec preferences
-- Only difference: skips heavy dependencies (gRPC, AWS SDK) not needed by the specific module
+- Compiles FreeSWITCH with `make -j $(nproc)` (same as production)
+- Applies production codec preferences (PCMU,PCMA,OPUS,G722)
+- Only difference: minimal modules.conf (just mod_audio_fork + essentials, not all 6 modules)
 
-### Stage 5: Static Validation
+### Stage 6: Static Validation
 Validate module compilation and dependencies:
 - Check module file exists
 - Verify dependencies with ldd
 - Check for missing libraries
 - Validate module-specific linkage
 
-### Stage 6: Runtime Validation ⭐ **NEW**
+### Stage 7: Runtime Validation ⭐ **NEW**
 **Actually runs FreeSWITCH to verify module loads successfully:**
 - Creates minimal FreeSWITCH configuration
 - Starts FreeSWITCH in background
@@ -88,7 +99,7 @@ Validate module compilation and dependencies:
 
 This stage guarantees that the built image actually works, not just that files exist.
 
-### Stage 7: Runtime Image
+### Stage 8: Runtime Image
 Create minimal runtime image with:
 - Only runtime dependencies
 - FreeSWITCH binaries from **validated build**
@@ -100,28 +111,26 @@ Create minimal runtime image with:
 
 Each Dockerfile includes multiple validation points:
 
-### 1. Static Build-time Validation (Stage 5)
+### 1. Static Build-time Validation (Stage 6)
    - **Point 1**: Module file exists
    - **Point 2**: Check module dependencies with ldd
    - **Point 3**: Verify module-specific library linkage (e.g., libwebsockets)
    - **Point 4**: Check for missing dependencies
-   - **Point 5**: Check FreeSWITCH binary exists
-   - **Point 6**: List all installed modules
 
-### 2. Runtime Validation During Build ⭐ **NEW** (Stage 6)
-   - **Point 7**: Verify mod_audio_fork appears in FreeSWITCH logs
-   - **Point 8**: Check for module loading errors (error/fail/cannot/unable)
-   - **Point 9**: Verify module loaded successfully (load/success/ready)
-   - **Point 10**: Check for critical FreeSWITCH errors (segfault/core dump/fatal)
+### 2. Runtime Validation During Build ⭐ **NEW** (Stage 7)
+   - **Point 5**: Verify mod_audio_fork appears in FreeSWITCH logs
+   - **Point 6**: Check for module loading errors (error/fail/cannot/unable)
+   - **Point 7**: Check for critical FreeSWITCH errors (segfault/core dump/fatal)
    - **Full FreeSWITCH startup log** printed for debugging
    - **Build fails** if any validation point fails!
 
 ### 3. Container Runtime Validation Script (`/validate-module.sh`)
-   - Checks module file
+   - Available in final container (Stage 8)
+   - Checks module file exists
    - Runs ldd to verify dependencies
-   - Starts FreeSWITCH to test module loading
-   - Checks FreeSWITCH logs for successful load
-   - Available for testing the final container
+   - Verifies libwebsockets linkage
+   - Checks for missing dependencies
+   - Can be run manually after container starts
 
 ## Differences from Main Production Dockerfile
 
