@@ -12,15 +12,15 @@ This guide explains how to build and run FreeSWITCH with transcription modules o
 - At least 16GB RAM
 - At least 20GB free disk space
 
-### Step 1: Clone Repository and Checkout Branch
+### Step 1: Clone Repository
 
 ```bash
 # Clone the repository
 git clone https://github.com/srthorat/freeswitch_modules.git
 cd freeswitch_modules
 
-# Checkout the branch
-git checkout claude/fix-incremental-batch-build-all-01WfPfYsy5N1LDzLrLiBokRy
+# Checkout your desired branch (optional)
+# git checkout <branch-name>
 ```
 
 ### Step 2: Review Configuration
@@ -117,15 +117,15 @@ sudo /usr/local/freeswitch/bin/freeswitch -nc -nonat -u freeswitch -g freeswitch
 - At least 16GB RAM allocated to Docker
 - At least 20GB free disk space
 
-### Step 1: Clone Repository and Checkout Branch
+### Step 1: Clone Repository
 
 ```bash
 # Clone the repository
 git clone https://github.com/srthorat/freeswitch_modules.git
 cd freeswitch_modules
 
-# Checkout the branch
-git checkout claude/fix-incremental-batch-build-all-01WfPfYsy5N1LDzLrLiBokRy
+# Checkout your desired branch (optional)
+# git checkout <branch-name>
 ```
 
 ### Step 2: Build Docker Image
