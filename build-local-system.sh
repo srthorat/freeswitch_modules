@@ -27,14 +27,19 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Get script directory ONCE at the beginning
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+log_info "Script directory: $SCRIPT_DIR"
+
 # Check if .env file exists
-if [ ! -f ".env" ]; then
-    log_error ".env file not found"
+if [ ! -f "$SCRIPT_DIR/.env" ]; then
+    log_error ".env file not found in $SCRIPT_DIR"
     exit 1
 fi
 
 # Read versions from .env
 log_info "Reading configuration from .env..."
+cd "$SCRIPT_DIR"
 CMAKE_VERSION=$(grep cmakeVersion .env | awk -F '=' '{print $2}' | awk '{print $1}')
 GRPC_VERSION=$(grep grpcVersion .env | awk -F '=' '{print $2}' | awk '{print $1}')
 LIBWEBSOCKETS_VERSION=$(grep libwebsocketsVersion .env | awk -F '=' '{print $2}' | awk '{print $1}')
@@ -52,12 +57,14 @@ log_info "  Speech SDK: $SPEECH_SDK_VERSION"
 log_info "  AWS SDK C++: $AWS_SDK_CPP_VERSION"
 log_info "  FreeSWITCH: $FREESWITCH_VERSION"
 
-# Set build directory
+# Set build directory and LD_LIBRARY_PATH early
 BUILD_DIR="/usr/local/src"
 BUILD_CPUS=$(nproc)
+export LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 log_info "Build directory: $BUILD_DIR"
 log_info "Build CPUs: $BUILD_CPUS"
+log_info "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 
 cd $BUILD_DIR
 
@@ -137,6 +144,7 @@ if [ ! -d "libwebsockets" ]; then
     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
     make -j ${BUILD_CPUS}
     make install
+    ldconfig /usr/local/lib
     log_info "libwebsockets built and installed successfully"
 else
     log_info "libwebsockets directory already exists, skipping..."
@@ -145,13 +153,13 @@ fi
 # Step 6: Install Azure Speech SDK
 log_info "Step 6/13: Installing Azure Speech SDK $SPEECH_SDK_VERSION..."
 if [ ! -d "/usr/local/include/MicrosoftSpeechSDK" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     cd /tmp
     tar xzf ${SCRIPT_DIR}/files/SpeechSDK-Linux-$SPEECH_SDK_VERSION.tar.gz
     cd SpeechSDK-Linux-$SPEECH_SDK_VERSION
     cp -r include /usr/local/include/MicrosoftSpeechSDK
     cp -r lib/ /usr/local/lib/MicrosoftSpeechSDK
     cp /usr/local/lib/MicrosoftSpeechSDK/x64/libMicrosoft.*.so /usr/local/lib/
+    ldconfig /usr/local/lib
     log_info "Azure Speech SDK installed successfully"
 else
     log_info "Azure Speech SDK already installed"
@@ -168,6 +176,7 @@ if [ ! -d "spandsp" ]; then
     ./configure
     make -j ${BUILD_CPUS}
     make install
+    ldconfig /usr/local/lib
     log_info "spandsp built and installed successfully"
 else
     log_info "spandsp directory already exists, skipping..."
@@ -183,6 +192,7 @@ if [ ! -d "sofia-sip" ]; then
     ./configure
     make -j ${BUILD_CPUS}
     make install
+    ldconfig /usr/local/lib
     log_info "sofia-sip built and installed successfully"
 else
     log_info "sofia-sip directory already exists, skipping..."
@@ -198,6 +208,7 @@ if [ ! -d "libfvad" ]; then
     ./configure
     make -j ${BUILD_CPUS}
     make install
+    ldconfig /usr/local/lib
     log_info "libfvad built and installed successfully"
 else
     log_info "libfvad directory already exists, skipping..."
@@ -217,6 +228,7 @@ if [ ! -d "aws-sdk-cpp" ]; then
     make install
     mkdir -p /usr/local/lib/pkgconfig
     find /usr/local/src/aws-sdk-cpp/ -type f -name "*.pc" | xargs cp -t /usr/local/lib/pkgconfig/
+    ldconfig /usr/local/lib
     log_info "AWS SDK C++ built and installed successfully"
 else
     log_info "AWS SDK C++ directory already exists, skipping..."
@@ -233,14 +245,11 @@ if [ ! -d "aws-c-common" ]; then
     cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DCMAKE_CXX_FLAGS="-Wno-unused-parameter"
     make -j ${BUILD_CPUS}
     make install
+    ldconfig /usr/local/lib
     log_info "AWS C Common built and installed successfully"
 else
     log_info "AWS C Common directory already exists, skipping..."
 fi
-
-# Update library paths
-ldconfig /usr/local/lib
-export LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 # Step 12: Build FreeSWITCH with modules
 log_info "Step 12/13: Building FreeSWITCH $FREESWITCH_VERSION with transcription modules..."
@@ -252,9 +261,6 @@ if [ ! -d "freeswitch" ]; then
 fi
 
 cd freeswitch
-
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Copy modules
 log_info "Copying transcription modules..."
@@ -298,8 +304,13 @@ cp ${SCRIPT_DIR}/files/conference_api.c .
 # Fix cJSON header conflict
 cd $BUILD_DIR/freeswitch
 log_info "Fixing cJSON header conflicts..."
-sed -i '/#ifndef cJSON_AS4CPP__h/i #ifndef cJSON__h\n#define cJSON__h' /usr/local/include/aws/core/external/cjson/cJSON.h
-echo '#endif' >> /usr/local/include/aws/core/external/cjson/cJSON.h
+if ! grep -q "ifndef cJSON__h" /usr/local/include/aws/core/external/cjson/cJSON.h; then
+    sed -i '/#ifndef cJSON_AS4CPP__h/i #ifndef cJSON__h\n#define cJSON__h' /usr/local/include/aws/core/external/cjson/cJSON.h
+    echo '#endif' >> /usr/local/include/aws/core/external/cjson/cJSON.h
+    log_info "cJSON header fixed"
+else
+    log_info "cJSON header already fixed"
+fi
 
 # Bootstrap and configure
 log_info "Bootstrapping FreeSWITCH..."
