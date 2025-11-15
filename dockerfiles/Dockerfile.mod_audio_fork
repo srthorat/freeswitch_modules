@@ -366,17 +366,30 @@ RUN echo "✅ modules.conf.xml created" \
 # Start FreeSWITCH in background and capture PID
 RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
     && export PATH=/usr/local/freeswitch/bin:$PATH \
-    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-validation.log 2>&1 & FS_PID=$! \
+    && echo "Starting FreeSWITCH in background..." \
+    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-stdout.log 2>&1 & FS_PID=$! \
     && echo "FreeSWITCH started with PID: $FS_PID" \
     && sleep 15 \
     && echo "" \
     && echo "=========================================" \
-    && echo "FreeSWITCH Startup Log:" \
-    && cat /tmp/freeswitch-validation.log \
+    && echo "FreeSWITCH Console Output (stdout/stderr):" \
+    && echo "=========================================" \
+    && cat /tmp/freeswitch-stdout.log || echo "(no stdout/stderr output)" \
+    && echo "" \
+    && echo "=========================================" \
+    && echo "FreeSWITCH Log File:" \
+    && echo "=========================================" \
+    && if [ -f /usr/local/freeswitch/log/freeswitch.log ]; then \
+        tail -100 /usr/local/freeswitch/log/freeswitch.log; \
+    else \
+        echo "❌ ERROR: FreeSWITCH log file not found - FreeSWITCH may have crashed"; \
+        kill $FS_PID 2>/dev/null || true; \
+        exit 1; \
+    fi \
     && echo "=========================================" \
     && echo "" \
     && echo "Validation Point 5: Verify mod_audio_fork appears in logs" \
-    && if grep -i "mod_audio_fork" /tmp/freeswitch-validation.log; then \
+    && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log; then \
         echo "✅ mod_audio_fork found in startup logs"; \
     else \
         echo "❌ ERROR: mod_audio_fork NOT found in logs"; \
@@ -385,16 +398,16 @@ RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
     fi \
     && echo "" \
     && echo "Validation Point 6: Check for module loading errors" \
-    && if grep -i "mod_audio_fork" /tmp/freeswitch-validation.log | grep -iE "error|fail|cannot|unable"; then \
+    && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log | grep -iE "error|fail|cannot|unable"; then \
         echo "❌ ERROR: mod_audio_fork loading errors detected"; \
         kill $FS_PID 2>/dev/null || true; \
         exit 1; \
     else \
-        echo "✅ No loading errors detected"; \
+        echo "✅ No loading errors detected for mod_audio_fork"; \
     fi \
     && echo "" \
     && echo "Validation Point 7: Check for critical FreeSWITCH errors" \
-    && if grep -iE "segmentation fault|segfault|core dump|fatal" /tmp/freeswitch-validation.log; then \
+    && if grep -iE "segmentation fault|segfault|core dump|fatal" /usr/local/freeswitch/log/freeswitch.log; then \
         echo "❌ ERROR: Critical errors detected"; \
         kill $FS_PID 2>/dev/null || true; \
         exit 1; \
