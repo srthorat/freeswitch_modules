@@ -532,7 +532,13 @@ echo ""
 echo "Available commands:"
 echo "  /validate-module.sh  - Validate module"
 echo "  freeswitch           - Run FreeSWITCH"
+echo "  fs_cli               - FreeSWITCH CLI"
 echo "  bash                 - Interactive shell"
+echo ""
+echo "Usage examples:"
+echo "  docker run --rm -it IMAGE freeswitch -nc -nf"
+echo "  docker run --rm -it --name fs IMAGE freeswitch -nc -nf &"
+echo "  docker exec -it fs fs_cli"
 echo ""
 
 if [ $# -eq 0 ]; then
