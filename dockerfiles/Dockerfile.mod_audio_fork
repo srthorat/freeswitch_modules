@@ -169,13 +169,16 @@ RUN echo "==========================================" \
     && echo "Note: Only mod_audio_fork will be compiled (see modules.conf)" \
     && echo "========================================="
 
-# Apply PRODUCTION patches (skip configure.ac.extra/Makefile.am.extra for individual builds)
+# Apply PRODUCTION patches and configure files
 RUN echo "==========================================" \
-    && echo "Applying production patches..." \
+    && echo "Applying production patches and configure files..." \
     && echo "==========================================" \
-    && echo "NOTE: Using standard FreeSWITCH configure.ac for individual module builds" \
-    && echo "      Production configure.ac.extra expects modules not in this repo" \
-    && echo "" \
+    && cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
+    && echo "  ✓ Copied configure.ac.extra" \
+    && cp /tmp/Makefile.am.extra /usr/local/src/freeswitch/Makefile.am \
+    && echo "  ✓ Copied Makefile.am.extra" \
+    && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
+    && echo "  ✓ Copied ax_check_compile_flag.m4" \
     && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
     && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src \
     && echo "  ✓ Copied patch files" \
@@ -198,8 +201,26 @@ RUN echo "==========================================" \
     && cp /tmp/mod_conference.h /usr/local/src/freeswitch/src/mod/applications/mod_conference \
     && cp /tmp/conference_api.c /usr/local/src/freeswitch/src/mod/applications/mod_conference \
     && echo "  ✓ Copied mod_conference custom files" \
-    && echo "✅ All applicable production patches applied!" \
-    && echo "   (configure.ac.extra skipped - designed for production with extra modules)"
+    && echo "✅ All production patches and files applied!"
+
+# Create dummy Makefile.am files for modules referenced in configure.ac.extra but not present
+# This allows production configure.ac.extra to work without failing on missing modules
+RUN echo "==========================================" \
+    && echo "Creating dummy Makefile.am for modules in configure.ac.extra..." \
+    && echo "==========================================" \
+    && cd /usr/local/src/freeswitch/src/mod/applications \
+    && for module in mod_assemblyai_transcribe mod_aws_lex mod_azure_tts mod_cobalt_transcribe \
+                     mod_deepgram_tts mod_dub mod_elevenlabs_tts mod_whisper_tts \
+                     mod_ibm_transcribe mod_jambonz_transcribe mod_nuance_transcribe \
+                     mod_nvidia_transcribe mod_playht_tts mod_rimelabs_tts \
+                     mod_soniox_transcribe mod_dialogflow; do \
+        if [ ! -d "$module" ]; then \
+            mkdir -p "$module"; \
+            echo "# Dummy Makefile.am for configure.ac.extra compatibility" > "$module/Makefile.am"; \
+            echo "  ✓ Created dummy $module/Makefile.am"; \
+        fi; \
+    done \
+    && echo "✅ Dummy Makefile.am files created for configure compatibility"
 
 # Create minimal modules.conf for mod_audio_fork testing
 RUN echo "==========================================" \
