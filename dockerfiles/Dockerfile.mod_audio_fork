@@ -200,7 +200,7 @@ RUN echo "==========================================" \
     && echo "Creating modules.conf for mod_audio_fork..." \
     && echo "==========================================" \
     && cd /usr/local/src/freeswitch \
-    && cat > modules.conf <<'EOF'
+    && cat > modules.conf <<EOF
 # Minimal FreeSWITCH modules for mod_audio_fork testing
 # Uses production FreeSWITCH build with all patches applied
 
@@ -219,8 +219,9 @@ dialplans/mod_dialplan_xml
 # ===== Formats =====
 formats/mod_sndfile
 EOF
-    && echo "✅ modules.conf created" \
-    && cat modules.conf
+
+RUN echo "✅ modules.conf created" \
+    && cat /usr/local/src/freeswitch/modules.conf
 
 # Bootstrap, configure, and build FreeSWITCH (using production configure flags)
 RUN echo "==========================================" \
@@ -326,7 +327,8 @@ RUN echo "=========================================" \
   </modules>
 </configuration>
 EOF
-    && echo "✅ modules.conf.xml created" \
+
+RUN echo "✅ modules.conf.xml created" \
     && echo "" \
     && echo "Starting FreeSWITCH to test module loading..." \
     && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
@@ -468,7 +470,8 @@ echo "========================================="
 echo "✅ Validation Complete!"
 echo "========================================="
 EOF
-    && chmod +x /validate-module.sh
+
+RUN chmod +x /validate-module.sh
 
 # Create entrypoint
 RUN cat > /entrypoint.sh <<'EOF'
@@ -493,7 +496,8 @@ else
     exec "$@"
 fi
 EOF
-    && chmod +x /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
 
 WORKDIR /usr/local/freeswitch
 
