@@ -29,7 +29,7 @@ cmake --version
 # Expected: cmake version 3.28.3
 ```
 
-**Script**: `./test-batch-simple.sh 1`
+**Script**: `sudo ./test-batch-simple.sh 1`
 
 ---
 
@@ -65,7 +65,7 @@ ls -lh /usr/local/bin/grpc_cpp_plugin
 ls -lh /usr/local/lib/libgrpc++.so
 ```
 
-**Script**: `./test-batch-simple.sh 2`
+**Script**: `sudo ./test-batch-simple.sh 2`
 
 ---
 
@@ -86,7 +86,7 @@ ls -lh /usr/local/lib/libwebsockets.so
 ls -d /tmp/freeswitch-build/googleapis
 ```
 
-**Script**: `./test-batch-simple.sh 3`
+**Script**: `sudo ./test-batch-simple.sh 3`
 
 ---
 
@@ -105,7 +105,7 @@ ls -lh /usr/local/lib/libMicrosoft.CognitiveServices.Speech.core.so
 ls -d /usr/local/include/MicrosoftSpeechSDK
 ```
 
-**Script**: `./test-batch-simple.sh 4`
+**Script**: `sudo ./test-batch-simple.sh 4`
 
 ---
 
@@ -124,7 +124,7 @@ ls -lh /usr/local/lib/libsofia-sip-ua.so
 ls -lh /usr/local/lib/libfvad.so
 ```
 
-**Script**: `./test-batch-simple.sh 5`
+**Script**: `sudo ./test-batch-simple.sh 5`
 
 ---
 
@@ -151,7 +151,7 @@ ls -lh /usr/local/lib/libaws-c-common.a
 ls /usr/local/lib/pkgconfig/*aws*.pc
 ```
 
-**Script**: `./test-batch-simple.sh 6`
+**Script**: `sudo ./test-batch-simple.sh 6`
 
 ---
 
@@ -180,21 +180,26 @@ ldd /usr/local/freeswitch/mod/mod_google_transcribe.so
 ldd /usr/local/freeswitch/mod/mod_audio_fork.so
 ```
 
-**Script**: `./test-batch-simple.sh 7`
+**Script**: `sudo ./test-batch-simple.sh 7`
 
 ---
 
 ## Running All Batches
 
-You can run all batches sequentially (not recommended for first build):
+You can run all batches sequentially:
 ```bash
-./test-batch-simple.sh 1
-./test-batch-simple.sh 2
-./test-batch-simple.sh 3
-./test-batch-simple.sh 4
-./test-batch-simple.sh 5
-./test-batch-simple.sh 6  # Longest: AWS SDK
-./test-batch-simple.sh 7  # Second longest: FreeSWITCH
+sudo ./test-batch-simple.sh 1
+sudo ./test-batch-simple.sh 2
+sudo ./test-batch-simple.sh 3
+sudo ./test-batch-simple.sh 4
+sudo ./test-batch-simple.sh 5
+sudo ./test-batch-simple.sh 6  # Longest: AWS SDK
+sudo ./test-batch-simple.sh 7  # Second longest: FreeSWITCH
+```
+
+Or run them all at once:
+```bash
+sudo ./test-batch-simple.sh all
 ```
 
 ---
@@ -316,11 +321,28 @@ tail -f /usr/local/freeswitch/log/freeswitch.log
 
 ---
 
+## Scripts Available
+
+**`test-batch-simple.sh`** - Simplified batch build script
+- Builds in `/tmp/freeswitch-build/` (doesn't install system packages)
+- Supports all 7 batches
+- Automatically downloads AWS SDK tarball if needed
+- Requires root access for `make install` and `ldconfig`
+
+**`build-batch.sh`** - Full batch build script
+- Builds in `/usr/local/src/` (installs system packages with apt-get)
+- Supports all 7 batches
+- Automatically downloads AWS SDK tarball if needed
+- Requires root access
+
+**`test-cmake-build.sh`** - Standalone CMake test
+- Tests CMake build only
+- Useful for debugging Batch 1 issues
+
 ## Files Created
 
-- `test-batch-simple.sh` - Main batch build script
-- `/tmp/batch*.log` - Build logs for each batch
 - `/tmp/freeswitch-build/` - Build directory (can be cleaned after install)
+- `files/aws-sdk-cpp-*.tar.gz` - AWS SDK tarball (auto-downloaded if missing)
 
 ---
 

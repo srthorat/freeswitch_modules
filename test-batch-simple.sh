@@ -8,6 +8,13 @@ log_info() { echo "[INFO] $1"; }
 log_error() { echo "[ERROR] $1" >&2; }
 log_success() { echo "[SUCCESS] $1"; }
 
+# Check if script is run as root
+if [ "$EUID" -ne 0 ]; then
+    log_error "Please run as root (use sudo)"
+    log_error "This script needs root access for 'make install' and 'ldconfig' commands"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Read versions from .env
@@ -220,6 +227,193 @@ batch_5() {
     log_success "BATCH 5 COMPLETE: spandsp, sofia-sip, libfvad installed"
 }
 
+# Batch 6: AWS SDK C++ + AWS C Common
+batch_6() {
+    log_info "========== BATCH 6: AWS SDK C++ + AWS C Common =========="
+    cd $BUILD_DIR
+
+    # AWS SDK C++
+    if [ ! -d "aws-sdk-cpp" ]; then
+        log_info "Cloning AWS SDK C++ $AWS_SDK_CPP_VERSION..."
+        git clone --depth 1 -b $AWS_SDK_CPP_VERSION https://github.com/aws/aws-sdk-cpp.git
+        cd aws-sdk-cpp
+        log_info "Updating submodules..."
+        git submodule update --init --recursive
+        mkdir -p build
+    else
+        log_info "AWS SDK C++ already cloned"
+        cd aws-sdk-cpp
+    fi
+
+    cd build
+
+    if [ ! -f "Makefile" ]; then
+        log_info "Configuring AWS SDK C++..."
+        cmake .. -DBUILD_ONLY="lexv2-runtime;transcribestreaming" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_SHARED_LIBS=ON -DCMAKE_CXX_FLAGS="-Wno-unused-parameter -Wno-error=nonnull -Wno-error=deprecated-declarations -Wno-error=uninitialized -Wno-error=maybe-uninitialized"
+    fi
+
+    log_info "Building AWS SDK C++ (20-40 minutes)..."
+    make -j ${BUILD_CPUS}
+
+    log_info "Installing AWS SDK C++..."
+    make install
+
+    # Copy pkg-config files
+    mkdir -p /usr/local/lib/pkgconfig
+    find $BUILD_DIR/aws-sdk-cpp/ -type f -name "*.pc" | xargs -I {} cp {} /usr/local/lib/pkgconfig/ || true
+    ldconfig
+
+    # AWS C Common
+    cd $BUILD_DIR
+    if [ ! -d "aws-c-common" ]; then
+        log_info "Cloning AWS C Common..."
+        git clone --depth 1 https://github.com/awslabs/aws-c-common.git
+        cd aws-c-common
+        mkdir -p build
+    else
+        log_info "AWS C Common already cloned"
+        cd aws-c-common
+    fi
+
+    cd build
+
+    if [ ! -f "Makefile" ]; then
+        log_info "Configuring AWS C Common..."
+        cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DCMAKE_CXX_FLAGS="-Wno-unused-parameter"
+    fi
+
+    log_info "Building AWS C Common..."
+    make -j ${BUILD_CPUS}
+    make install
+    ldconfig
+
+    ls -lh /usr/local/lib/libaws-cpp-sdk-transcribestreaming.so /usr/local/lib/libaws-c-common.a
+    log_success "BATCH 6 COMPLETE: AWS SDK C++ and AWS C Common installed"
+}
+
+# Batch 7: FreeSWITCH + Modules
+batch_7() {
+    log_info "========== BATCH 7: FreeSWITCH + Modules =========="
+    cd $BUILD_DIR
+
+    if [ ! -d "freeswitch" ]; then
+        log_info "Cloning FreeSWITCH $FREESWITCH_VERSION..."
+        git clone --depth 1 -b v$FREESWITCH_VERSION https://github.com/signalwire/freeswitch.git
+    else
+        log_info "FreeSWITCH already cloned"
+    fi
+
+    cd freeswitch
+
+    # Copy modules
+    log_info "Copying transcription modules..."
+    cp -r ${SCRIPT_DIR}/modules/* src/mod/applications/
+
+    # Copy googleapis
+    log_info "Copying googleapis..."
+    cp -r $BUILD_DIR/googleapis libs/
+
+    # Add modules to modules.conf
+    log_info "Adding modules to modules.conf..."
+    if ! grep -q "mod_audio_fork" modules.conf; then
+        cat >> modules.conf <<EOF
+applications/mod_audio_fork
+applications/mod_aws_transcribe
+applications/mod_azure_transcribe
+applications/mod_deepgram_transcribe
+applications/mod_google_transcribe
+EOF
+    fi
+
+    # Copy vars_diff.xml if it exists
+    if [ -f "${SCRIPT_DIR}/vars_diff.xml" ]; then
+        log_info "Copying vars_diff.xml..."
+        cp ${SCRIPT_DIR}/vars_diff.xml autoload_configs/
+    fi
+
+    # Prepare AWS SDK tarball for FreeSWITCH build system
+    log_info "Preparing AWS SDK tarball..."
+    mkdir -p libs/aws-sdk-cpp
+    if [ ! -f "${SCRIPT_DIR}/files/aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz" ]; then
+        log_info "Downloading AWS SDK C++ ${AWS_SDK_CPP_VERSION} tarball..."
+        cd /tmp
+        wget -q https://github.com/aws/aws-sdk-cpp/archive/refs/tags/${AWS_SDK_CPP_VERSION}.tar.gz -O aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz
+        mkdir -p ${SCRIPT_DIR}/files
+        mv aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz ${SCRIPT_DIR}/files/
+        cd $BUILD_DIR/freeswitch
+    fi
+    cp ${SCRIPT_DIR}/files/aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz libs/aws-sdk-cpp/
+
+    # Copy mod_conference files
+    log_info "Copying mod_conference files..."
+    cd src/mod/applications/mod_conference
+    cp ${SCRIPT_DIR}/files/mod_conference.h .
+    cp ${SCRIPT_DIR}/files/conference_api.c .
+
+    # Fix cJSON header conflict
+    cd $BUILD_DIR/freeswitch
+    log_info "Fixing cJSON header conflicts..."
+    if [ -f "/usr/local/include/aws/core/external/cjson/cJSON.h" ]; then
+        if ! grep -q "ifndef cJSON__h" /usr/local/include/aws/core/external/cjson/cJSON.h; then
+            sed -i '/#ifndef cJSON_AS4CPP__h/i #ifndef cJSON__h\n#define cJSON__h' /usr/local/include/aws/core/external/cjson/cJSON.h
+            echo '#endif' >> /usr/local/include/aws/core/external/cjson/cJSON.h
+            log_info "cJSON header fixed"
+        else
+            log_info "cJSON header already fixed"
+        fi
+    fi
+
+    # Bootstrap and configure
+    if [ ! -f "configure" ]; then
+        log_info "Bootstrapping FreeSWITCH..."
+        ./bootstrap.sh -j
+    fi
+
+    if [ ! -f "Makefile" ]; then
+        log_info "Configuring FreeSWITCH..."
+        ./configure --enable-tcmalloc=yes --with-lws=yes --with-extra=yes --with-aws=yes
+    fi
+
+    # Build
+    log_info "Building FreeSWITCH (20-30 minutes)..."
+    make -j ${BUILD_CPUS}
+
+    # Install
+    log_info "Installing FreeSWITCH..."
+    make install
+
+    # Verify modules
+    log_info "Verifying modules..."
+    MODULE_DIR="/usr/local/freeswitch/mod"
+    MODULES_TO_CHECK=("mod_audio_fork" "mod_aws_transcribe" "mod_azure_transcribe" "mod_deepgram_transcribe" "mod_google_transcribe")
+
+    ALL_MODULES_EXIST=true
+    for module in "${MODULES_TO_CHECK[@]}"; do
+        if [ -f "$MODULE_DIR/${module}.so" ]; then
+            log_success "  ✓ ${module}.so found"
+            # Check dependencies
+            if ldd "$MODULE_DIR/${module}.so" | grep -q "not found"; then
+                log_error "  ✗ ${module} has missing dependencies:"
+                ldd "$MODULE_DIR/${module}.so" | grep "not found"
+                ALL_MODULES_EXIST=false
+            else
+                log_success "  ✓ ${module} dependencies OK"
+            fi
+        else
+            log_error "  ✗ ${module}.so NOT FOUND"
+            ALL_MODULES_EXIST=false
+        fi
+    done
+
+    if [ "$ALL_MODULES_EXIST" = true ]; then
+        log_success "BATCH 7 COMPLETE: FreeSWITCH and all modules installed"
+    else
+        log_error "BATCH 7 FAILED: Some modules missing or have dependency issues"
+        exit 1
+    fi
+}
+
 # Main
 BATCH=${1:-1}
 
@@ -229,13 +423,27 @@ case "$BATCH" in
     3) batch_3 ;;
     4) batch_4 ;;
     5) batch_5 ;;
+    6) batch_6 ;;
+    7) batch_7 ;;
+    all)
+        batch_1
+        batch_2
+        batch_3
+        batch_4
+        batch_5
+        batch_6
+        batch_7
+        ;;
     *)
-        echo "Usage: $0 [1|2|3|4|5]"
+        echo "Usage: $0 [1|2|3|4|5|6|7|all]"
         echo "  1 - CMake (1 min)"
         echo "  2 - gRPC + Protobuf (15-30 min)"
         echo "  3 - googleapis + libwebsockets (5-10 min)"
         echo "  4 - Azure Speech SDK (1 min)"
         echo "  5 - spandsp + sofia-sip + libfvad (10-15 min)"
+        echo "  6 - AWS SDK C++ + AWS C Common (20-40 min)"
+        echo "  7 - FreeSWITCH + Modules (20-30 min)"
+        echo "  all - Run all batches sequentially"
         exit 1
         ;;
 esac

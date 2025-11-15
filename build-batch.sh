@@ -79,7 +79,7 @@ batch_1() {
         pkg-config git wget curl libssl-dev zlib1g-dev libncurses5-dev \
         libsqlite3-dev libpcre3-dev libspeex-dev libspeexdsp-dev libedit-dev \
         libldns-dev liblua5.2-dev libopus-dev yasm nasm libavformat-dev \
-        libswscale-dev libavresample-dev libjpeg-dev ca-certificates \
+        libswscale-dev libjpeg-dev ca-certificates \
         libgoogle-perftools-dev google-perftools libsndfile1-dev
 
     log_success "System dependencies installed"
@@ -380,10 +380,19 @@ EOF
         cp ${SCRIPT_DIR}/vars_diff.xml autoload_configs/
     fi
 
-    # Copy AWS SDK tarball
-    log_info "Copying AWS SDK tarball..."
+    # Copy AWS SDK tarball for FreeSWITCH build system
+    log_info "Preparing AWS SDK tarball..."
     mkdir -p libs/aws-sdk-cpp
-    cp ${SCRIPT_DIR}/files/aws-sdk-cpp-1.11.200.tar.gz libs/aws-sdk-cpp/
+    # FreeSWITCH expects AWS SDK tarball in libs/aws-sdk-cpp/
+    # Using the version matching .env configuration
+    if [ ! -f "${SCRIPT_DIR}/files/aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz" ]; then
+        log_info "Downloading AWS SDK C++ ${AWS_SDK_CPP_VERSION} tarball..."
+        cd /tmp
+        wget -q https://github.com/aws/aws-sdk-cpp/archive/refs/tags/${AWS_SDK_CPP_VERSION}.tar.gz -O aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz
+        mv aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz ${SCRIPT_DIR}/files/
+        cd $BUILD_DIR/freeswitch
+    fi
+    cp ${SCRIPT_DIR}/files/aws-sdk-cpp-${AWS_SDK_CPP_VERSION}.tar.gz libs/aws-sdk-cpp/
 
     # Copy mod_conference files
     cd src/mod/applications/mod_conference
