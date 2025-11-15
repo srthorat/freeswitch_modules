@@ -214,6 +214,63 @@ Each module has its own configuration file in `/usr/local/freeswitch/conf/autolo
 
 ---
 
+## Files Analysis Summary
+
+The `files/` directory contains critical build configurations, patches, and source modifications required for transcription modules.
+
+### Build Configuration Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| **configure.ac.extra** | 2,471 | FreeSWITCH autoconf configuration with custom flags |
+| **Makefile.am.extra** | 1,052 | Top-level build targets and module inclusion |
+| **modules.conf.in.extra** | 195 | Build-time module list (includes transcription modules) |
+| **modules.conf.vanilla.xml.extra** | 169 | Runtime module loading configuration |
+| **ax_check_compile_flag.m4** | 50 | Autoconf macro for SIMD optimization detection (AVX2/SSE2) |
+
+**configure.ac.extra adds these critical flags:**
+- `--with-lws` - Enables libwebsockets support (required for Deepgram, Azure, Audio Fork)
+- `--with-extra` - Enables gRPC/protobuf modules (required for Google Cloud)
+- `--with-aws` - Enables AWS SDK modules (required for AWS Transcribe)
+
+### Patch Files (Security & Functionality)
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| **switch_core_media.c.patch** | 12 | **Security fix**: Adds buffer overflow protection for RED frames |
+| **switch_rtp.c.patch** | 38 | **Disables RTP packet flushing** - ensures all audio packets received (critical for transcription) |
+| **mod_avmd.c.patch** | 23 | Forces READ_REPLACE for inbound calls (drachtio-fsmrf compatibility) |
+| **mod_httapi.c.patch** | 57 | **AWS S3 signed URL support** - proper caching of S3 presigned URLs |
+
+**Security Details:**
+- `switch_core_media.c.patch` adds `count >= MAX_RED_FRAMES` bounds check to prevent buffer overflow
+- `switch_rtp.c.patch` comments out packet flush logic to guarantee packet delivery for real-time transcription
+
+**Functional Modifications:**
+- RTP packet handling optimized for continuous audio streaming
+- HTTP API enhanced for AWS S3 integration
+- AVMD (answering machine detection) configured for media server use cases
+
+### Source File Replacements
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| **switch_event.c** | 3,844 | Complete replacement of FreeSWITCH core event system |
+| **conference_api.c** | 4,375 | Conference module API implementation (custom commands) |
+| **mod_conference.h** | 1,336 | Conference module header (matches conference_api.c) |
+
+These files provide custom event handling and conference functionality tailored for media server applications.
+
+### What's NOT Included
+
+**XML Configuration Files (Removed - Using FreeSWITCH Defaults):**
+- No custom `acl.conf.xml`, `switch.conf.xml`, `vars.xml`, etc.
+- FreeSWITCH uses vanilla default configurations
+- Transcription modules use default FreeSWITCH dialplan and SIP profiles
+- Runtime configuration can be added post-installation as needed
+
+---
+
 ## Batch Build Details
 
 ### Batch 1: CMake (1 min)
