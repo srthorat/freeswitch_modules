@@ -200,7 +200,7 @@ Each module has its own configuration file in `/usr/local/freeswitch/conf/autolo
 
 | Module | Dependencies |
 |--------|--------------|
-| mod_audio_fork | libwebsockets 4.3.3 |
+| mod_audio_fork | libwebsockets 4.3.3, libspeexdsp (speex resampler) |
 | mod_aws_transcribe | AWS C++ SDK 1.11.345 (transcribestreaming) |
 | mod_azure_transcribe | libwebsockets 4.3.3, Azure Speech SDK 1.37.0 |
 | mod_deepgram_transcribe | libwebsockets 4.3.3 |
