@@ -143,12 +143,20 @@ WORKDIR /usr/local/src/freeswitch
 # Bootstrap FreeSWITCH
 RUN ./bootstrap.sh -j
 
-# Configure with all standard modules enabled
+# Disable modules that require unavailable dependencies
+# mod_verto requires libks2/libks (WebRTC verto protocol - can skip for base)
+# mod_signalwire requires additional deps
+RUN sed -i 's|^endpoints/mod_verto$|#endpoints/mod_verto|' modules.conf \
+    && sed -i 's|^endpoints/mod_skinny$|#endpoints/mod_skinny|' modules.conf \
+    && sed -i 's|^applications/mod_signalwire$|#applications/mod_signalwire|' modules.conf \
+    && sed -i 's|^applications/mod_av$|#applications/mod_av|' modules.conf \
+    && echo "✅ Disabled modules requiring unavailable dependencies"
+
+# Configure FreeSWITCH with core features
 RUN ./configure \
     --prefix=/usr/local/freeswitch \
     --enable-core-pgsql-support \
     --enable-core-odbc-support \
-    --enable-static-v8 \
     --enable-tcmalloc \
     && echo "✅ FreeSWITCH configured"
 
