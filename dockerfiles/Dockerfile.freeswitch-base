@@ -158,12 +158,15 @@ RUN sed -i 's|^endpoints/mod_verto$|#endpoints/mod_verto|' modules.conf \
     && sed -i 's|^languages/mod_php$|#languages/mod_php|' modules.conf \
     && echo "✅ Disabled optional modules requiring additional dependencies"
 
-# Configure FreeSWITCH with core features
+# Configure FreeSWITCH with core features (disable language bindings we don't need)
 RUN ./configure \
     --prefix=/usr/local/freeswitch \
     --enable-core-pgsql-support \
     --enable-core-odbc-support \
     --enable-tcmalloc \
+    --without-python \
+    --without-java \
+    --without-perl \
     && echo "✅ FreeSWITCH configured"
 
 # Build FreeSWITCH
