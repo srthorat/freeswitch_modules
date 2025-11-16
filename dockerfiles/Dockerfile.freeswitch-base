@@ -182,7 +182,8 @@ RUN make install && echo "✅ FreeSWITCH installed"
 RUN make cd-sounds-install cd-moh-install && echo "✅ Sounds installed"
 
 # Install sample configuration
-RUN cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
+RUN mkdir -p /usr/local/freeswitch/conf \
+    && cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
     && echo "✅ Sample configuration installed"
 
 # ============================================================================
