@@ -31,12 +31,13 @@ RUN echo "=============================================" \
     && echo "Build CPUs: ${BUILD_CPUS}" \
     && echo "============================================="
 
-# Install build dependencies required for libwebsockets
+# Install build dependencies required for libwebsockets and mod_audio_fork
 RUN apt-get update && apt-get install -y --quiet --no-install-recommends \
     git \
     cmake \
     build-essential \
     libssl-dev \
+    libspeexdsp-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
