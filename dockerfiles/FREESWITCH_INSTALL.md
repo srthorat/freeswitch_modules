@@ -592,7 +592,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ---
 
-### Error 11: Language Bindings (Java, Perl, PHP)
+### Error 11: Configuration Directory Not Created
+
+**Error Message**:
+```
+cp: target '/usr/local/freeswitch/conf/' is not a directory
+make: *** [Makefile:xxx] Error 1
+```
+
+**Explanation**:
+- After successful compilation and `make install`, configuration directory doesn't exist
+- `make install` creates main directories (`/usr/local/freeswitch/bin`, `/usr/local/freeswitch/lib`) but not `conf/`
+- The vanilla configuration from source needs to be copied to this directory
+- `cp` fails because target directory doesn't exist
+
+**Solution**:
+- Create `/usr/local/freeswitch/conf` directory before copying configuration
+
+**Code**:
+```dockerfile
+# Install sample configuration
+RUN mkdir -p /usr/local/freeswitch/conf \
+    && cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
+    && echo "✅ Sample configuration installed"
+```
+
+**Why this happens**:
+- `make install` only creates directories for binaries and libraries
+- Configuration is meant to be installed via `make samples` or manually
+- We manually install vanilla config for better control
+
+**Impact**: Without vanilla configuration, FreeSWITCH won't start (missing vars.xml, dialplan, SIP profiles, etc.)
+
+---
+
+### Error 12: Language Bindings (Java, Perl, PHP)
 
 **Not yet encountered, but proactively disabled**
 
