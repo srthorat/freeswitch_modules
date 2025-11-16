@@ -9,36 +9,81 @@ This directory contains Dockerfiles for building FreeSWITCH images with differen
 
 ## 1. FreeSWITCH Base Image (Recommended Starting Point)
 
-**File**: `Dockerfile.freeswitch-base`
-**Build Script**: `build-freeswitch-base.sh`
-**Documentation**: `README.freeswitch-base.md`
+**Files**:
+- Dockerfile: `Dockerfile.freeswitch-base`
+- Build Script: `build-freeswitch-base.sh`
+- Detailed Install Guide: `FREESWITCH_INSTALL.md`
+- Deployment Guide: `DOCKER_HUB_DEPLOYMENT.md`
 
 ### Features
 - ✅ FreeSWITCH 1.10.11 (production release) built from source
-- ✅ All standard modules compiled and available
+- ✅ All standard modules compiled (100+ modules)
 - ✅ SIP and WebRTC support
 - ✅ Event socket enabled (fs_cli ready)
-- ✅ Extensions 1000 and 1001 pre-configured
+- ✅ Extensions 1000 and 1001 pre-configured (password: 1234)
 - ✅ System utilities (ps, netstat, ping, vim, curl)
 - ✅ Supervisor for process management
 
 ### Quick Start
+
+#### Build the Image
 ```bash
 # Build (30-45 minutes on Intel, 60-90 on Apple Silicon)
-./dockerfiles/build-freeswitch-base.sh
-
-# Run
-docker run --rm -it --name fs --network host freeswitch-base:1.10.11
-
-# Connect with fs_cli
-docker exec -it fs fs_cli
+./dockerfiles/build-freeswitch-base.sh freeswitch-base:1.10.11
 ```
 
+#### Run FreeSWITCH
+```bash
+# Run with all ports mapped
+docker run -d --name freeswitch \
+    -p 5060:5060/tcp -p 5060:5060/udp \
+    -p 5080:5080/tcp -p 8021:8021/tcp \
+    -p 16384-16484:16384-16484/udp \
+    freeswitch-base:1.10.11
+
+# Wait for startup
+sleep 30
+
+# Connect with fs_cli
+docker exec -it freeswitch fs_cli
+```
+
+#### Verify Installation
+```bash
+# Check FreeSWITCH status
+docker exec freeswitch fs_cli -x "status"
+
+# List loaded modules (should be 100+)
+docker exec freeswitch fs_cli -x "show modules" | wc -l
+
+# Check SIP profiles
+docker exec freeswitch fs_cli -x "sofia status"
+
+# View logs
+docker logs -f freeswitch
+```
+
+#### Test Extensions
+Pre-configured extensions ready to use:
+- **Extension 1000**: Username=1000, Password=1234
+- **Extension 1001**: Username=1001, Password=1234
+
+Register SIP clients (Zoiper, Linphone, etc.) and test calling between extensions.
+
 ### Use Cases
-- Production-ready FreeSWITCH deployment
-- Testing SIP/WebRTC functionality
-- Base for extending with custom modules
-- Learning FreeSWITCH configuration
+- ✅ Production-ready FreeSWITCH deployment
+- ✅ Testing SIP/WebRTC functionality
+- ✅ Base for extending with custom modules
+- ✅ Learning FreeSWITCH configuration
+
+### Exposed Ports
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 5060-5061 | TCP/UDP | SIP signaling |
+| 5080-5081 | TCP/UDP | SIP over WebSocket (WebRTC) |
+| 8021 | TCP | Event Socket (fs_cli) |
+| 7443 | TCP | WebRTC signaling |
+| 16384-16484 | UDP | RTP media (audio/video) |
 
 ---
 
