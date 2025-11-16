@@ -1,316 +1,116 @@
 # ============================================================================
-# Dockerfile for testing mod_audio_fork individually
+# Dockerfile for mod_audio_fork - Based on Production FreeSWITCH Base Image
 # ============================================================================
-# This Dockerfile builds FreeSWITCH IDENTICALLY to production but skips
-# heavy dependencies (gRPC, AWS SDK) that mod_audio_fork doesn't need.
+# This Dockerfile builds mod_audio_fork on top of srt2011/freeswitch-base:latest
+# which already includes:
+#   - FreeSWITCH 1.10.11 fully built and configured
+#   - All required configs for SIP calls (extensions 1000-1001)
+#   - Event Socket configured for fs_cli
+#   - Production patches and optimizations
 #
-# Same as production:
-#   - FreeSWITCH version
-#   - All patches (switch_core_media.c, switch_rtp.c, mod_avmd.c, mod_httapi.c)
-#   - All custom files (switch_event.c, mod_conference modifications)
-#   - Same configure flags (--enable-tcmalloc, --with-lws, --with-extra)
-#   - Same base packages
+# This Dockerfile ONLY adds:
+#   - libwebsockets 4.3.3 (required dependency for mod_audio_fork)
+#   - mod_audio_fork module build
 #
-# Different from production:
-#   - Skips gRPC build (~1 hour saved)
-#   - Skips AWS SDK build (~1-2 hours saved)
-#   - Skips Azure Speech SDK
-#   - Only builds mod_audio_fork (not all 6 modules)
-#   - --with-aws=no (since we don't build AWS SDK)
-#
-# Build time: 15-25 min (vs 90-150 min for full build)
+# Build time: ~10-15 minutes (vs 90+ min for full build)
 # ============================================================================
 
-ARG DEBIAN_VERSION=bullseye-slim
-FROM debian:${DEBIAN_VERSION} AS base
+ARG BASE_IMAGE=srt2011/freeswitch-base:latest
+FROM ${BASE_IMAGE} AS builder
 
-ARG BUILD_CPUS=1
+# Build argument for versions
+ARG LIBWEBSOCKETS_VERSION=4.3.3
+ARG BUILD_CPUS=4
 
-# Build arguments for versions (from .env file)
-ARG CMAKE_VERSION
-ARG LIBWEBSOCKETS_VERSION
-ARG SPANDSP_VERSION
-ARG SOFIA_VERSION
-ARG FREESWITCH_VERSION
-
-# Print versions for build log
+# Print build configuration
 RUN echo "=============================================" \
-    && echo "Build Configuration for mod_audio_fork" \
+    && echo "Building mod_audio_fork" \
     && echo "=============================================" \
-    && echo "CMAKE_VERSION=$CMAKE_VERSION" \
-    && echo "LIBWEBSOCKETS_VERSION=$LIBWEBSOCKETS_VERSION" \
-    && echo "SPANDSP_VERSION=$SPANDSP_VERSION" \
-    && echo "SOFIA_VERSION=$SOFIA_VERSION" \
-    && echo "FREESWITCH_VERSION=$FREESWITCH_VERSION" \
+    && echo "Base Image: srt2011/freeswitch-base:latest" \
+    && echo "Dependency: libwebsockets ${LIBWEBSOCKETS_VERSION}" \
+    && echo "Build CPUs: ${BUILD_CPUS}" \
     && echo "============================================="
 
-# Install EXACT same base packages as production
-RUN for i in $(seq 1 8); do mkdir -p "/usr/share/man/man${i}"; done \
-    && apt-get update && apt-get -y --quiet --allow-remove-essential upgrade \
-    && apt-get install -y --quiet --no-install-recommends \
-    python-is-python3 lsof gcc g++ make build-essential git autoconf automake default-mysql-client redis-tools \
-    curl telnet libtool libtool-bin libssl-dev libcurl4-openssl-dev libz-dev liblz4-tool \
-    libxtables-dev libip6tc-dev libip4tc-dev  libiptc-dev libavformat-dev liblua5.1-0-dev libavfilter-dev libavcodec-dev libswresample-dev \
-    libevent-dev libpcap-dev libxmlrpc-core-c3-dev markdown libjson-glib-dev lsb-release libpq-dev php-dev \
-    libhiredis-dev gperf libspandsp-dev default-libmysqlclient-dev htop dnsutils gdb libtcmalloc-minimal4 \
-    gnupg2 wget pkg-config ca-certificates libjpeg-dev libsqlite3-dev libpcre3-dev libldns-dev libboost-all-dev \
-    libspeex-dev libspeexdsp-dev libedit-dev libtiff-dev yasm libswscale-dev haveged libre2-dev \
-    libopus-dev libsndfile-dev libshout3-dev libmpg123-dev libmp3lame-dev libopusfile-dev libgoogle-perftools-dev \
-    && git config --global http.postBuffer 524288000  \
-  	&& git config --global https.postBuffer 524288000 \
-	  && git config --global pull.rebase true
+# Install build dependencies required for libwebsockets
+RUN apt-get update && apt-get install -y --quiet --no-install-recommends \
+    git \
+    cmake \
+    build-essential \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# ============================================================================
-# Build Stage: CMake (same as production)
-# ============================================================================
-FROM base AS base-cmake
-WORKDIR /usr/local/src
-RUN export CMAKE_VERSION=$CMAKE_VERSION \
-    && echo "Building CMake ${CMAKE_VERSION}..." \
-    && wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.sh \
-    && chmod +x cmake-${CMAKE_VERSION}-linux-x86_64.sh \
-    && ./cmake-${CMAKE_VERSION}-linux-x86_64.sh --skip-license --prefix=/usr/local \
-    && rm -f cmake-${CMAKE_VERSION}-linux-x86_64.sh \
-    && cmake --version \
-    && echo "✅ CMake ${CMAKE_VERSION} installed"
-
-# ============================================================================
-# Build Stage: libwebsockets (REQUIRED for mod_audio_fork)
-# ============================================================================
-FROM base-cmake AS websockets
-WORKDIR /usr/local/src
+# Set library path
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN echo "Building libwebsockets ${LIBWEBSOCKETS_VERSION}..." \
-    && git clone --depth 1 -b v$LIBWEBSOCKETS_VERSION https://github.com/warmcat/libwebsockets.git \
-    && cd /usr/local/src/libwebsockets \
-    && mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo && make && make install \
+
+# ============================================================================
+# Build libwebsockets (ONLY dependency for mod_audio_fork)
+# ============================================================================
+WORKDIR /usr/local/src
+RUN echo "=========================================" \
+    && echo "Building libwebsockets ${LIBWEBSOCKETS_VERSION}..." \
+    && echo "=========================================" \
+    && git clone --depth 1 -b v${LIBWEBSOCKETS_VERSION} https://github.com/warmcat/libwebsockets.git \
+    && cd libwebsockets \
+    && mkdir -p build && cd build \
+    && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    && make -j ${BUILD_CPUS} \
+    && make install \
+    && ldconfig \
     && echo "✅ libwebsockets ${LIBWEBSOCKETS_VERSION} installed"
 
 # ============================================================================
-# Build Stage: spandsp (FreeSWITCH dependency - same as production)
+# Copy mod_audio_fork source and build it
 # ============================================================================
-FROM base AS spandsp
 WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN echo "Building spandsp ${SPANDSP_VERSION}..." \
-    && git clone https://github.com/freeswitch/spandsp.git && cd spandsp && git checkout $SPANDSP_VERSION \
-    && ./bootstrap.sh && ./configure && make -j ${BUILD_CPUS} && make install \
-    && echo "✅ spandsp ${SPANDSP_VERSION} installed"
 
-# ============================================================================
-# Build Stage: sofia-sip (FreeSWITCH dependency - same as production)
-# ============================================================================
-FROM base AS sofia-sip
-WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN echo "Building sofia-sip ${SOFIA_VERSION}..." \
-    && git clone --depth 1 -b v$SOFIA_VERSION https://github.com/freeswitch/sofia-sip.git \
-    && cd sofia-sip \
-    && ./bootstrap.sh && ./configure && make -j ${BUILD_CPUS} && make install \
-    && echo "✅ sofia-sip ${SOFIA_VERSION} installed"
-
-# ============================================================================
-# Build Stage: libfvad (FreeSWITCH dependency - same as production)
-# ============================================================================
-FROM base AS libfvad
-WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-RUN echo "Building libfvad..." \
-    && git clone --depth 1 https://github.com/dpirch/libfvad.git \
-    && cd libfvad \
-    && autoreconf -i && ./configure && make -j ${BUILD_CPUS} && make install \
-    && echo "✅ libfvad installed"
-
-# ============================================================================
-# Build Stage: FreeSWITCH with mod_audio_fork
-# ============================================================================
-# NOTE: This stage is IDENTICAL to production except:
-#   - We don't copy AWS SDK, gRPC, Azure Speech SDK (saves hours)
-#   - We skip the AWS cJSON.h modification (line 171 in main Dockerfile)
-#   - We use --with-aws=no instead of --with-aws=yes
-#   - We only build mod_audio_fork instead of all 6 modules
-# Everything else is THE SAME: patches, custom files, configure flags.
-# ============================================================================
-FROM base AS freeswitch
-
-# Copy production patches and custom files
-COPY ./files/ /tmp/
-
-# Copy dependencies from build stages
-COPY --from=libfvad /usr/local/include/ /usr/local/include/
-COPY --from=libfvad /usr/local/lib/ /usr/local/lib/
-COPY --from=sofia-sip /usr/local/bin/ /usr/local/bin/
-COPY --from=sofia-sip /usr/local/include/ /usr/local/include/
-COPY --from=sofia-sip /usr/local/lib/ /usr/local/lib/
-COPY --from=sofia-sip /usr/local/share/sofia-sip/ /usr/local/share/sofia-sip/
-COPY --from=spandsp /usr/local/include/ /usr/local/include/
-COPY --from=spandsp /usr/local/lib/ /usr/local/lib/
-COPY --from=websockets /usr/local/include/ /usr/local/include/
-COPY --from=websockets /usr/local/lib/ /usr/local/lib/
-
-WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
-
-# Clone FreeSWITCH (same version as production)
-RUN echo "==========================================" \
-    && echo "Cloning FreeSWITCH ${FREESWITCH_VERSION}..." \
-    && echo "==========================================" \
-    && git clone --depth 1 -b v$FREESWITCH_VERSION https://github.com/signalwire/freeswitch.git \
-    && echo "✅ FreeSWITCH ${FREESWITCH_VERSION} cloned"
-
-# Copy ALL modules (required for production configure.ac.extra to work)
-# Production configure.ac expects all module directories to exist
-# We only BUILD mod_audio_fork (controlled by modules.conf)
-COPY ./modules/ /usr/local/src/freeswitch/src/mod/applications/
-
-RUN echo "==========================================" \
-    && echo "Module directories copied:" \
-    && ls -1 /usr/local/src/freeswitch/src/mod/applications/ | grep ^mod_ \
-    && echo "Note: Only mod_audio_fork will be compiled (see modules.conf)" \
-    && echo "========================================="
-
-# Apply PRODUCTION patches and configure files
-RUN echo "==========================================" \
-    && echo "Applying production patches and configure files..." \
-    && echo "==========================================" \
-    && cp /tmp/configure.ac.extra /usr/local/src/freeswitch/configure.ac \
-    && echo "  ✓ Copied configure.ac.extra" \
-    && cp /tmp/Makefile.am.extra /usr/local/src/freeswitch/Makefile.am \
-    && echo "  ✓ Copied Makefile.am.extra" \
-    && cp /tmp/ax_check_compile_flag.m4 /usr/local/src/freeswitch/ax_check_compile_flag.m4 \
-    && echo "  ✓ Copied ax_check_compile_flag.m4" \
-    && cp /tmp/switch_core_media.c.patch /usr/local/src/freeswitch/src \
-    && cp /tmp/switch_rtp.c.patch /usr/local/src/freeswitch/src \
-    && echo "  ✓ Copied patch files" \
-    && cd /usr/local/src/freeswitch/src \
-    && patch < switch_core_media.c.patch \
-    && echo "  ✓ Applied switch_core_media.c.patch" \
-    && patch < switch_rtp.c.patch \
-    && echo "  ✓ Applied switch_rtp.c.patch" \
-    && cp /tmp/mod_avmd.c.patch /usr/local/src/freeswitch/src/mod/applications/mod_avmd \
-    && cd /usr/local/src/freeswitch/src/mod/applications/mod_avmd \
-    && patch < mod_avmd.c.patch \
-    && echo "  ✓ Applied mod_avmd.c.patch" \
-    && cp /tmp/mod_httapi.c.patch /usr/local/src/freeswitch/src/mod/applications/mod_httapi \
-    && cd /usr/local/src/freeswitch/src/mod/applications/mod_httapi \
-    && patch < mod_httapi.c.patch \
-    && echo "  ✓ Applied mod_httapi.c.patch" \
-    && cd /usr/local/src/freeswitch/src \
-    && cp /tmp/switch_event.c . \
-    && echo "  ✓ Copied switch_event.c" \
-    && cp /tmp/mod_conference.h /usr/local/src/freeswitch/src/mod/applications/mod_conference \
-    && cp /tmp/conference_api.c /usr/local/src/freeswitch/src/mod/applications/mod_conference \
-    && echo "  ✓ Copied mod_conference custom files" \
-    && echo "✅ All production patches and files applied!"
-
-# Create dummy Makefile.am files for modules referenced in configure.ac.extra but not present
-# This allows production configure.ac.extra to work without failing on missing modules
-RUN echo "==========================================" \
-    && echo "Creating dummy Makefile.am for modules in configure.ac.extra..." \
-    && echo "==========================================" \
-    && cd /usr/local/src/freeswitch/src/mod/applications \
-    && for module in mod_assemblyai_transcribe mod_aws_lex mod_azure_tts mod_cobalt_transcribe \
-                     mod_deepgram_tts mod_dub mod_elevenlabs_tts mod_whisper_tts \
-                     mod_ibm_transcribe mod_jambonz_transcribe mod_nuance_transcribe \
-                     mod_nvidia_transcribe mod_playht_tts mod_rimelabs_tts \
-                     mod_soniox_transcribe mod_dialogflow; do \
-        if [ ! -d "$module" ]; then \
-            mkdir -p "$module"; \
-            echo "# Dummy Makefile.am for configure.ac.extra compatibility" > "$module/Makefile.am"; \
-            echo "  ✓ Created dummy $module/Makefile.am"; \
-        fi; \
-    done \
-    && echo "✅ Dummy Makefile.am files created for configure compatibility"
-
-# Create minimal modules.conf for mod_audio_fork testing
-RUN echo "==========================================" \
-    && echo "Creating modules.conf for mod_audio_fork..." \
-    && echo "==========================================" \
-    && cd /usr/local/src/freeswitch \
-    && cat > modules.conf <<EOF
-# Minimal FreeSWITCH modules for mod_audio_fork testing
-# Uses production FreeSWITCH build with all patches applied
-
-# ===== Loggers =====
-loggers/mod_console
-loggers/mod_logfile
-
-# ===== Applications =====
-applications/mod_commands
-applications/mod_dptools
-applications/mod_audio_fork
-
-# ===== Dialplan =====
-dialplans/mod_dialplan_xml
-
-# ===== Formats =====
-formats/mod_sndfile
-EOF
-
-RUN echo "✅ modules.conf created" \
-    && cat /usr/local/src/freeswitch/modules.conf
-
-# Bootstrap, configure, and build FreeSWITCH (using production configure flags)
-RUN echo "==========================================" \
-    && echo "Building FreeSWITCH with production configuration..." \
-    && echo "==========================================" \
-    && cd /usr/local/src/freeswitch \
-    && ./bootstrap.sh -j \
-    && echo "✅ Bootstrap complete" \
-    && echo "" \
-    && echo "Configuring with production flags..." \
-    && echo "  --enable-tcmalloc=yes (production performance)" \
-    && echo "  --with-lws=yes (REQUIRED for mod_audio_fork)" \
-    && echo "  --with-extra=yes (production feature set)" \
-    && echo "  --with-aws=no (AWS SDK not built to save time)" \
-    && ./configure --enable-tcmalloc=yes --with-lws=yes --with-extra=yes --with-aws=no \
-    && echo "✅ Configure complete" \
-    && echo "" \
-    && echo "Building FreeSWITCH with ${BUILD_CPUS} CPU cores..." \
-    && make -j ${BUILD_CPUS} \
-    && echo "✅ FreeSWITCH built" \
-    && echo "" \
-    && echo "Installing FreeSWITCH..." \
-    && make install \
-    && echo "✅ FreeSWITCH installed to /usr/local/freeswitch" \
-    && echo "" \
-    && echo "Installing vanilla configuration files..." \
-    && cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
-    && echo "✅ Vanilla configs installed"
-
-# Apply production configuration changes (same as production)
-RUN echo "==========================================" \
-    && echo "Applying production configuration..." \
-    && echo "==========================================" \
-    && cd /usr/local/src/freeswitch \
-    && cp /usr/local/src/freeswitch/conf/vanilla/autoload_configs/modules.conf.xml /usr/local/freeswitch/conf/autoload_configs \
-	  && sed -i -e 's/global_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/global_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml \
-	  && sed -i -e 's/outbound_codec_prefs=OPUS,G722,PCMU,PCMA,H264,VP8/outbound_codec_prefs=PCMU,PCMA,OPUS,G722/g' /usr/local/freeswitch/conf/vars.xml \
-    && echo "✅ Production codec preferences applied"
-
-# ============================================================================
-# Validation Stage: Static Checks
-# ============================================================================
-FROM freeswitch AS validator
+# Copy mod_audio_fork module source
+COPY ./modules/mod_audio_fork /usr/local/src/mod_audio_fork
 
 RUN echo "=========================================" \
-    && echo "Module Static Validation" \
+    && echo "Building mod_audio_fork..." \
+    && echo "=========================================" \
+    && cd /usr/local/src/mod_audio_fork \
+    && ls -la \
+    && echo "" \
+    && echo "Compiling mod_audio_fork with g++..." \
+    && g++ -fPIC -shared \
+        -I/usr/local/freeswitch/include/freeswitch \
+        -I/usr/local/include \
+        -o /usr/local/freeswitch/mod/mod_audio_fork.so \
+        mod_audio_fork.c \
+        lws_glue.cpp \
+        audio_pipe.cpp \
+        -lwebsockets \
+        -lpthread \
+        -lssl \
+        -lcrypto \
+    && echo "✅ mod_audio_fork compiled successfully" \
+    && echo "" \
+    && echo "Module location:" \
+    && ls -lh /usr/local/freeswitch/mod/mod_audio_fork.so
+
+# ============================================================================
+# Validation Stage: Verify module dependencies
+# ============================================================================
+RUN echo "=========================================" \
+    && echo "Module Validation" \
     && echo "=========================================" \
     && MODULE_PATH="/usr/local/freeswitch/mod/mod_audio_fork.so" \
-    && echo "Validation Point 1: Check module file exists" \
+    && echo "" \
+    && echo "1. Check module file exists:" \
     && if [ -f "$MODULE_PATH" ]; then \
-        echo "✅ Module file exists: $MODULE_PATH"; \
+        echo "✅ Module file exists"; \
         ls -lh "$MODULE_PATH"; \
     else \
         echo "❌ ERROR: Module file not found: $MODULE_PATH"; \
-        ls -la /usr/local/freeswitch/mod/ || true; \
         exit 1; \
     fi \
     && echo "" \
-    && echo "Validation Point 2: Check module dependencies with ldd" \
+    && echo "2. Check module dependencies with ldd:" \
     && ldd "$MODULE_PATH" \
     && echo "" \
-    && echo "Validation Point 3: Verify libwebsockets linkage" \
+    && echo "3. Verify libwebsockets linkage:" \
     && if ldd "$MODULE_PATH" | grep -q "libwebsockets"; then \
         echo "✅ Module correctly linked with libwebsockets"; \
         ldd "$MODULE_PATH" | grep libwebsockets; \
@@ -319,7 +119,7 @@ RUN echo "=========================================" \
         exit 1; \
     fi \
     && echo "" \
-    && echo "Validation Point 4: Check for missing dependencies" \
+    && echo "4. Check for missing dependencies:" \
     && if ldd "$MODULE_PATH" | grep -q "not found"; then \
         echo "❌ ERROR: Missing dependencies:"; \
         ldd "$MODULE_PATH" | grep "not found"; \
@@ -328,101 +128,99 @@ RUN echo "=========================================" \
         echo "✅ No missing dependencies"; \
     fi \
     && echo "=========================================" \
-    && echo "✅ All static validation checks passed!" \
+    && echo "✅ Static validation passed!" \
     && echo "========================================="
 
 # ============================================================================
-# Validation Stage: Runtime Test (Actually Run FreeSWITCH)
+# Update FreeSWITCH modules.conf.xml to load mod_audio_fork
 # ============================================================================
-FROM validator AS runtime-validator
-
 RUN echo "=========================================" \
-    && echo "Runtime Validation - FreeSWITCH Startup Test" \
+    && echo "Configuring FreeSWITCH to load mod_audio_fork..." \
     && echo "=========================================" \
-    && mkdir -p /usr/local/freeswitch/conf/autoload_configs \
-    && mkdir -p /usr/local/freeswitch/log \
-    && mkdir -p /usr/local/freeswitch/run \
-    && mkdir -p /usr/local/freeswitch/db \
-    && echo "" \
-    && echo "Creating modules.conf.xml to load mod_audio_fork..." \
-    && cat > /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml <<'EOF'
+    && MODULES_CONF="/usr/local/freeswitch/conf/autoload_configs/modules.conf.xml" \
+    && if [ -f "$MODULES_CONF" ]; then \
+        # Add mod_audio_fork before the closing </modules> tag
+        sed -i '/<\/modules>/i \    <load module="mod_audio_fork"/>' "$MODULES_CONF"; \
+        echo "✅ Added mod_audio_fork to modules.conf.xml"; \
+    else \
+        echo "❌ modules.conf.xml not found - will create it"; \
+        mkdir -p /usr/local/freeswitch/conf/autoload_configs; \
+        cat > "$MODULES_CONF" <<'EOF'
 <configuration name="modules.conf" description="Modules">
   <modules>
-    <!-- Core logging and console -->
+    <!-- Loggers -->
     <load module="mod_console"/>
     <load module="mod_logfile"/>
 
-    <!-- Event socket for fs_cli connectivity -->
+    <!-- Event Socket -->
     <load module="mod_event_socket"/>
 
-    <!-- Core functionality -->
+    <!-- Applications -->
     <load module="mod_commands"/>
     <load module="mod_dptools"/>
-
-    <!-- Target module for testing -->
     <load module="mod_audio_fork"/>
 
-    <!-- Required supporting modules -->
+    <!-- Dialplan -->
     <load module="mod_dialplan_xml"/>
+
+    <!-- Endpoints -->
+    <load module="mod_sofia"/>
+
+    <!-- Formats -->
     <load module="mod_sndfile"/>
+    <load module="mod_tone_stream"/>
   </modules>
 </configuration>
 EOF
-
-RUN echo "✅ modules.conf.xml created" \
+        echo "✅ Created modules.conf.xml with mod_audio_fork"; \
+    fi \
     && echo "" \
-    && echo "Starting FreeSWITCH to test module loading..."
+    && echo "modules.conf.xml contents:" \
+    && cat "$MODULES_CONF"
 
-# Start FreeSWITCH in background and capture PID
-RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
+# ============================================================================
+# Runtime Validation: Test module loading
+# ============================================================================
+RUN echo "=========================================" \
+    && echo "Runtime Validation - Testing module load..." \
+    && echo "=========================================" \
+    && mkdir -p /usr/local/freeswitch/log \
+    && mkdir -p /usr/local/freeswitch/run \
+    && mkdir -p /usr/local/freeswitch/db \
+    && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
     && export PATH=/usr/local/freeswitch/bin:$PATH \
-    && echo "Starting FreeSWITCH in background..." \
+    && echo "Starting FreeSWITCH for module load test..." \
     && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-stdout.log 2>&1 & FS_PID=$! \
     && echo "FreeSWITCH started with PID: $FS_PID" \
-    && sleep 15 \
+    && sleep 20 \
     && echo "" \
-    && echo "=========================================" \
-    && echo "FreeSWITCH Console Output (stdout/stderr):" \
-    && echo "=========================================" \
-    && cat /tmp/freeswitch-stdout.log || echo "(no stdout/stderr output)" \
-    && echo "" \
-    && echo "=========================================" \
-    && echo "FreeSWITCH Log File:" \
-    && echo "=========================================" \
+    && echo "Checking FreeSWITCH logs..." \
     && if [ -f /usr/local/freeswitch/log/freeswitch.log ]; then \
+        echo "✅ FreeSWITCH log found"; \
         tail -100 /usr/local/freeswitch/log/freeswitch.log; \
     else \
-        echo "❌ ERROR: FreeSWITCH log file not found - FreeSWITCH may have crashed"; \
+        echo "❌ ERROR: FreeSWITCH log not found"; \
+        cat /tmp/freeswitch-stdout.log || true; \
         kill $FS_PID 2>/dev/null || true; \
         exit 1; \
     fi \
-    && echo "=========================================" \
     && echo "" \
-    && echo "Validation Point 5: Verify mod_audio_fork appears in logs" \
+    && echo "5. Verify mod_audio_fork loaded:" \
     && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log; then \
-        echo "✅ mod_audio_fork found in startup logs"; \
+        echo "✅ mod_audio_fork found in logs"; \
     else \
         echo "❌ ERROR: mod_audio_fork NOT found in logs"; \
         kill $FS_PID 2>/dev/null || true; \
         exit 1; \
     fi \
     && echo "" \
-    && echo "Validation Point 6: Check for module loading errors" \
+    && echo "6. Check for module loading errors:" \
     && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log | grep -iE "error|fail|cannot|unable"; then \
         echo "❌ ERROR: mod_audio_fork loading errors detected"; \
         kill $FS_PID 2>/dev/null || true; \
         exit 1; \
     else \
-        echo "✅ No loading errors detected for mod_audio_fork"; \
-    fi \
-    && echo "" \
-    && echo "Validation Point 7: Check for critical FreeSWITCH errors" \
-    && if grep -iE "segmentation fault|segfault|core dump|fatal" /usr/local/freeswitch/log/freeswitch.log; then \
-        echo "❌ ERROR: Critical errors detected"; \
-        kill $FS_PID 2>/dev/null || true; \
-        exit 1; \
-    else \
-        echo "✅ No critical errors"; \
+        echo "✅ No loading errors for mod_audio_fork"; \
     fi \
     && kill $FS_PID 2>/dev/null || true \
     && wait $FS_PID 2>/dev/null || true \
@@ -430,45 +228,28 @@ RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
     && echo "=========================================" \
     && echo "✅✅✅ RUNTIME VALIDATION PASSED! ✅✅✅" \
     && echo "=========================================" \
-    && echo "Production FreeSWITCH with mod_audio_fork loaded successfully!" \
+    && echo "mod_audio_fork loaded successfully!" \
     && echo "========================================="
 
 # ============================================================================
-# Final Stage: Runtime Image
+# Final Stage: Clean Runtime Image
 # ============================================================================
-FROM debian:${DEBIAN_VERSION} AS runtime
+FROM ${BASE_IMAGE} AS runtime
 
-# Install runtime dependencies (same as production would need)
-RUN apt-get update \
-    && apt-get install -y --quiet --no-install-recommends \
-        ca-certificates \
-        libsqlite3-0 \
-        libcurl4 \
-        libpcre3 \
-        libspeex1 \
-        libspeexdsp1 \
-        libedit2 \
-        libtiff5 \
-        libopus0 \
-        libsndfile1 \
-        libshout3 \
-        libtcmalloc-minimal4 \
-    && ldconfig \
-    && rm -rf /var/lib/apt/lists/*
+# Copy libwebsockets library from builder
+COPY --from=builder /usr/local/lib/libwebsockets.so* /usr/local/lib/
+COPY --from=builder /usr/local/include/libwebsockets* /usr/local/include/
 
-# Copy FreeSWITCH installation from runtime-validated build
-ARG TARGETARCH
-ENV LIB_DIR=/usr/lib/x86_64-linux-gnu
-RUN if [ "$TARGETARCH" = "arm64" ]; then LIB_DIR=/usr/lib/aarch64-linux-gnu; fi
+# Copy mod_audio_fork module
+COPY --from=builder /usr/local/freeswitch/mod/mod_audio_fork.so /usr/local/freeswitch/mod/
 
-COPY --from=runtime-validator /usr/local/freeswitch/ /usr/local/freeswitch/
-COPY --from=runtime-validator /usr/local/bin/ /usr/local/bin/
-COPY --from=runtime-validator /usr/local/lib/ /usr/local/lib/
-COPY --from=runtime-validator $LIB_DIR/libwebsockets.* /usr/lib/
+# Copy updated modules.conf.xml
+COPY --from=builder /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml /usr/local/freeswitch/conf/autoload_configs/
 
+# Update library cache
 RUN ldconfig
 
-# Set environment variables
+# Set environment
 ENV PATH="/usr/local/freeswitch/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
 
@@ -478,21 +259,15 @@ RUN cat > /validate-module.sh <<'EOF'
 set -e
 
 echo "========================================="
-echo "mod_audio_fork Validation Script"
+echo "mod_audio_fork Validation"
 echo "========================================="
 echo ""
-echo "This FreeSWITCH build is IDENTICAL to production except:"
-echo "  - Only mod_audio_fork is enabled (not all 6 modules)"
-echo "  - gRPC was not built (saves ~1 hour)"
-echo "  - AWS SDK was not built (saves ~1-2 hours)"
+echo "Base Image: srt2011/freeswitch-base:latest"
+echo "Module: mod_audio_fork"
+echo "Dependency: libwebsockets 4.3.3"
 echo ""
-echo "FreeSWITCH Configuration:"
-echo "  - All production patches applied ✓"
-echo "  - All custom files applied ✓"
-echo "  - Production configure flags ✓"
-echo "  - Production codec preferences ✓"
-echo ""
-echo "Checking mod_audio_fork..."
+
+echo "Checking module file..."
 if [ -f "/usr/local/freeswitch/mod/mod_audio_fork.so" ]; then
     echo "✅ mod_audio_fork.so exists"
     ls -lh /usr/local/freeswitch/mod/mod_audio_fork.so
@@ -524,31 +299,32 @@ echo ""
 echo "========================================="
 echo "✅ Validation Complete!"
 echo "========================================="
+echo ""
+echo "FreeSWITCH is ready with mod_audio_fork!"
+echo ""
+echo "Extensions configured: 1000, 1001 (password: 1234)"
+echo "Event Socket: Port 8021"
+echo ""
+echo "Usage:"
+echo "  docker run -d -p 5060:5060/udp -p 8021:8021 --name fs IMAGE"
+echo "  docker exec -it fs fs_cli"
+echo ""
 EOF
 
 RUN chmod +x /validate-module.sh
 
 # Create entrypoint
-RUN cat > /entrypoint.sh <<'EOF'
+COPY --from=builder /usr/local/src/freeswitch_modules/entrypoint.sh /entrypoint.sh 2>/dev/null || \
+    cat > /entrypoint.sh <<'EOF'
 #!/bin/bash
 set -e
 
 echo "========================================="
-echo "FreeSWITCH mod_audio_fork Test Container"
+echo "FreeSWITCH with mod_audio_fork"
 echo "========================================="
-echo "Production-identical FreeSWITCH build"
+echo "Base: srt2011/freeswitch-base:latest"
+echo "Module: mod_audio_fork + libwebsockets"
 echo "========================================="
-echo ""
-echo "Available commands:"
-echo "  /validate-module.sh  - Validate module"
-echo "  freeswitch           - Run FreeSWITCH"
-echo "  fs_cli               - FreeSWITCH CLI"
-echo "  bash                 - Interactive shell"
-echo ""
-echo "Usage examples:"
-echo "  docker run --rm -it IMAGE freeswitch -nc -nf"
-echo "  docker run --rm -it --name fs IMAGE freeswitch -nc -nf &"
-echo "  docker exec -it fs fs_cli"
 echo ""
 
 if [ $# -eq 0 ]; then
@@ -562,13 +338,15 @@ RUN chmod +x /entrypoint.sh
 
 WORKDIR /usr/local/freeswitch
 
+# Expose ports (from base image)
+EXPOSE 5060/tcp 5060/udp 5080/tcp 5080/udp 8021/tcp 16384-16484/udp
+
 ENTRYPOINT ["/entrypoint.sh"]
-CMD []
+CMD ["freeswitch", "-nc", "-nf"]
 
 # Labels
-LABEL maintainer="FreeSWITCH Modules"
-LABEL description="Production-identical FreeSWITCH with mod_audio_fork for individual testing"
+LABEL maintainer="FreeSWITCH mod_audio_fork"
+LABEL description="FreeSWITCH with mod_audio_fork - based on srt2011/freeswitch-base:latest"
+LABEL base.image="srt2011/freeswitch-base:latest"
 LABEL module="mod_audio_fork"
-LABEL freeswitch.version="${FREESWITCH_VERSION}"
-LABEL build.type="production-identical"
-LABEL build.optimizations="Skips gRPC and AWS SDK to save ~2-3 hours build time"
+LABEL dependency="libwebsockets-4.3.3"
