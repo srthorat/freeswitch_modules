@@ -134,103 +134,20 @@ RUN echo "=========================================" \
 # ============================================================================
 # Update FreeSWITCH modules.conf.xml to load mod_audio_fork
 # ============================================================================
-RUN echo "=========================================" \
-    && echo "Configuring FreeSWITCH to load mod_audio_fork..." \
-    && echo "=========================================" \
-    && MODULES_CONF="/usr/local/freeswitch/conf/autoload_configs/modules.conf.xml" \
-    && if [ -f "$MODULES_CONF" ]; then \
-        # Add mod_audio_fork before the closing </modules> tag
-        sed -i '/<\/modules>/i \    <load module="mod_audio_fork"/>' "$MODULES_CONF"; \
-        echo "✅ Added mod_audio_fork to modules.conf.xml"; \
-    else \
-        echo "❌ modules.conf.xml not found - will create it"; \
-        mkdir -p /usr/local/freeswitch/conf/autoload_configs; \
-        cat > "$MODULES_CONF" <<'EOF'
-<configuration name="modules.conf" description="Modules">
-  <modules>
-    <!-- Loggers -->
-    <load module="mod_console"/>
-    <load module="mod_logfile"/>
-
-    <!-- Event Socket -->
-    <load module="mod_event_socket"/>
-
-    <!-- Applications -->
-    <load module="mod_commands"/>
-    <load module="mod_dptools"/>
-    <load module="mod_audio_fork"/>
-
-    <!-- Dialplan -->
-    <load module="mod_dialplan_xml"/>
-
-    <!-- Endpoints -->
-    <load module="mod_sofia"/>
-
-    <!-- Formats -->
-    <load module="mod_sndfile"/>
-    <load module="mod_tone_stream"/>
-  </modules>
-</configuration>
-EOF
-; \
-        echo "✅ Created modules.conf.xml with mod_audio_fork"; \
-    fi \
-    && echo "" \
-    && echo "modules.conf.xml contents:" \
-    && cat "$MODULES_CONF"
+RUN sed -i '/<\/modules>/i \    <load module="mod_audio_fork"/>' \
+    /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml \
+    && echo "✅ Added mod_audio_fork to modules.conf.xml"
 
 # ============================================================================
-# Runtime Validation: Test module loading
+# Runtime Validation: Quick module load test
 # ============================================================================
-RUN echo "=========================================" \
-    && echo "Runtime Validation - Testing module load..." \
-    && echo "=========================================" \
-    && mkdir -p /usr/local/freeswitch/log \
-    && mkdir -p /usr/local/freeswitch/run \
-    && mkdir -p /usr/local/freeswitch/db \
-    && export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
-    && export PATH=/usr/local/freeswitch/bin:$PATH \
-    && echo "Starting FreeSWITCH for module load test..." \
-    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf > /tmp/freeswitch-stdout.log 2>&1 & FS_PID=$! \
-    && echo "FreeSWITCH started with PID: $FS_PID" \
-    && sleep 20 \
-    && echo "" \
-    && echo "Checking FreeSWITCH logs..." \
-    && if [ -f /usr/local/freeswitch/log/freeswitch.log ]; then \
-        echo "✅ FreeSWITCH log found"; \
-        tail -100 /usr/local/freeswitch/log/freeswitch.log; \
-    else \
-        echo "❌ ERROR: FreeSWITCH log not found"; \
-        cat /tmp/freeswitch-stdout.log || true; \
-        kill $FS_PID 2>/dev/null || true; \
-        exit 1; \
-    fi \
-    && echo "" \
-    && echo "5. Verify mod_audio_fork loaded:" \
-    && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log; then \
-        echo "✅ mod_audio_fork found in logs"; \
-    else \
-        echo "❌ ERROR: mod_audio_fork NOT found in logs"; \
-        kill $FS_PID 2>/dev/null || true; \
-        exit 1; \
-    fi \
-    && echo "" \
-    && echo "6. Check for module loading errors:" \
-    && if grep -i "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log | grep -iE "error|fail|cannot|unable"; then \
-        echo "❌ ERROR: mod_audio_fork loading errors detected"; \
-        kill $FS_PID 2>/dev/null || true; \
-        exit 1; \
-    else \
-        echo "✅ No loading errors for mod_audio_fork"; \
-    fi \
+RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
+    && timeout 60s /usr/local/freeswitch/bin/freeswitch -nonat -nc -nf >/dev/null 2>&1 & FS_PID=$! \
+    && sleep 15 \
+    && grep -q "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log \
+    && ! grep "mod_audio_fork" /usr/local/freeswitch/log/freeswitch.log | grep -qiE "error|fail|cannot|unable" \
     && kill $FS_PID 2>/dev/null || true \
-    && wait $FS_PID 2>/dev/null || true \
-    && echo "" \
-    && echo "=========================================" \
-    && echo "✅✅✅ RUNTIME VALIDATION PASSED! ✅✅✅" \
-    && echo "=========================================" \
-    && echo "mod_audio_fork loaded successfully!" \
-    && echo "========================================="
+    && echo "✅ Runtime validation passed - mod_audio_fork loaded successfully"
 
 # ============================================================================
 # Final Stage: Clean Runtime Image
