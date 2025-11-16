@@ -1,29 +1,33 @@
 #!/bin/bash
 # ============================================================================
-# Run FreeSWITCH Base Image on MacBook
+# Run FreeSWITCH Docker Image on MacBook
 # ============================================================================
 #
 # Usage:
-#   ./run-on-macbook.sh <dockerhub-username> [image-version]
+#   ./run-on-macbook.sh <docker-image-name>
 #
-# Example:
-#   ./run-on-macbook.sh johndoe 1.10.11
+# Examples:
+#   ./run-on-macbook.sh srt2011/freeswitch-base:latest
+#   ./run-on-macbook.sh srt2011/freeswitch-mod-audio-fork:latest
+#   ./run-on-macbook.sh username/freeswitch-base:1.10.11
 #
 # ============================================================================
 
 set -e
 
-DOCKERHUB_USERNAME=${1}
-IMAGE_VERSION=${2:-1.10.11}
-REMOTE_IMAGE="${DOCKERHUB_USERNAME}/freeswitch-base:${IMAGE_VERSION}"
+REMOTE_IMAGE=${1}
 CONTAINER_NAME="freeswitch"
 
 # Validation
-if [ -z "$DOCKERHUB_USERNAME" ]; then
-    echo "Error: Docker Hub username is required"
+if [ -z "$REMOTE_IMAGE" ]; then
+    echo "❌ Error: Docker image name is required"
     echo ""
-    echo "Usage: $0 <dockerhub-username> [image-version]"
-    echo "Example: $0 johndoe 1.10.11"
+    echo "Usage: $0 <docker-image-name>"
+    echo ""
+    echo "Examples:"
+    echo "  $0 srt2011/freeswitch-base:latest"
+    echo "  $0 srt2011/freeswitch-mod-audio-fork:latest"
+    echo "  $0 username/freeswitch-base:1.10.11"
     exit 1
 fi
 
