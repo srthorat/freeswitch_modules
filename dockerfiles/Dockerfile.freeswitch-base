@@ -146,11 +146,17 @@ RUN ./bootstrap.sh -j
 # Disable modules that require unavailable dependencies
 # mod_verto requires libks2/libks (WebRTC verto protocol - can skip for base)
 # mod_signalwire requires additional deps
+# Language bindings (python, php, perl, java) - optional for base image
 RUN sed -i 's|^endpoints/mod_verto$|#endpoints/mod_verto|' modules.conf \
     && sed -i 's|^endpoints/mod_skinny$|#endpoints/mod_skinny|' modules.conf \
     && sed -i 's|^applications/mod_signalwire$|#applications/mod_signalwire|' modules.conf \
     && sed -i 's|^applications/mod_av$|#applications/mod_av|' modules.conf \
-    && echo "✅ Disabled modules requiring unavailable dependencies"
+    && sed -i 's|^languages/mod_python$|#languages/mod_python|' modules.conf \
+    && sed -i 's|^languages/mod_python3$|#languages/mod_python3|' modules.conf \
+    && sed -i 's|^languages/mod_java$|#languages/mod_java|' modules.conf \
+    && sed -i 's|^languages/mod_perl$|#languages/mod_perl|' modules.conf \
+    && sed -i 's|^languages/mod_php$|#languages/mod_php|' modules.conf \
+    && echo "✅ Disabled optional modules requiring additional dependencies"
 
 # Configure FreeSWITCH with core features
 RUN ./configure \
