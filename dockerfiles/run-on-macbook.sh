@@ -67,11 +67,12 @@ echo "Step 2: Starting FreeSWITCH container..."
 docker run -d \
     --name "$CONTAINER_NAME" \
     --platform linux/amd64 \
+    --net=host \
     -p 5060:5060/tcp \
     -p 5060:5060/udp \
     -p 5080:5080/tcp \
     -p 5080:5080/udp \
-    -p 8021:8021/tcp \
+    -p 18021:8021/tcp \
     -p 16384-16484:16384-16484/udp \
     "$REMOTE_IMAGE"
 
