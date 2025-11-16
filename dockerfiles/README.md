@@ -418,9 +418,82 @@ docker run --rm -it <image> freeswitch -nc -nf
 docker run --rm <image> cat /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 ```
 
+---
+
+## Testing and Deployment
+
+### Testing Options
+
+Once you've built the FreeSWITCH base image, you have three options for testing:
+
+#### Option 1: Test in Codespaces (Fastest)
+**Best for**: Quick validation, development testing, call flow verification
+
+```bash
+# Run automated test
+./dockerfiles/test-in-codespaces.sh
+```
+
+**Features**:
+- ✅ Instant testing without Docker Hub
+- ✅ Test call origination with fs_cli
+- ✅ Monitor calls in real-time
+- ⚠️ Limited audio testing (WebRTC only via port forwarding)
+
+See **CODESPACES_TESTING.md** for detailed instructions.
+
+#### Option 2: Deploy to Docker Hub → Test on MacBook (Full Testing)
+**Best for**: Real audio testing, production-like environment, SIP client testing
+
+```bash
+# 1. Push to Docker Hub (in Codespaces)
+./dockerfiles/push-to-dockerhub.sh your-username
+
+# 2. Pull and run on MacBook
+./dockerfiles/run-on-macbook.sh your-username
+```
+
+**Features**:
+- ✅ Full audio testing with real SIP clients
+- ✅ Support for all SIP transports (UDP/TCP/TLS)
+- ✅ Test with Zoiper, Linphone, or any SIP client
+- ✅ Production-like networking
+
+See **DOCKER_HUB_DEPLOYMENT.md** for detailed instructions.
+
+#### Option 3: Automated Validation
+**Best for**: CI/CD, quick health checks
+
+```bash
+# Run validation script
+./dockerfiles/test-freeswitch-base.sh freeswitch-base:1.10.11
+```
+
+**Validates**:
+- FreeSWITCH process running
+- fs_cli connectivity
+- Module loading (100+ modules)
+- SIP profiles active
+- Extensions 1000 and 1001 configured
+- System utilities available
+
+### Comparison
+
+| Feature | Codespaces | Docker Hub + MacBook | Validation Script |
+|---------|-----------|---------------------|-------------------|
+| Setup Time | ⚡ Instant | 🕐 15-20 min | ⚡ Instant |
+| Real Audio | ⚠️ WebRTC only | ✅ Full audio | ❌ No audio |
+| SIP Clients | ⚠️ Browser-based | ✅ Any SIP client | ❌ N/A |
+| Use Case | Development | Production testing | Health check |
+| Network | HTTPS tunnels | Direct UDP/TCP | Local only |
+
+---
+
 ## Resources
 
 - [FreeSWITCH Documentation](https://freeswitch.org/confluence/)
+- [Installation Guide](FREESWITCH_INSTALL.md) - Complete dependency guide
+- [Codespaces Testing](CODESPACES_TESTING.md) - Test in Codespaces
+- [Docker Hub Deployment](DOCKER_HUB_DEPLOYMENT.md) - Deploy and test on MacBook
 - [Main Repository README](../README.md)
-- [Installation Guide](../INSTALL.md)
 - [Individual Module READMEs](../modules/)
