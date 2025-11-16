@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Database
     libsqlite3-dev \
     libpq-dev \
+    unixodbc-dev \
     # SIP dependencies
     libsofia-sip-ua-dev \
     # WebRTC dependencies
@@ -135,6 +136,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Database
     libsqlite3-0 \
     libpq5 \
+    unixodbc \
     # SIP
     libsofia-sip-ua0 \
     # WebRTC
