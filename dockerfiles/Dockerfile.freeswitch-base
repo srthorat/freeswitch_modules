@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libedit-dev \
     libtiff-dev \
     libldns-dev \
+    uuid-dev \
     # Codecs and media
     libopus-dev \
     libsndfile1-dev \
@@ -200,6 +201,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libedit2 \
     libtiff5 \
     libldns3 \
+    libuuid1 \
     # Codecs
     libopus0 \
     libsndfile1 \
