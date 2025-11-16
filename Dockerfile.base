@@ -1,0 +1,304 @@
+# ============================================================================
+# FreeSWITCH 1.10.x Base Image - Full Build from Source
+# ============================================================================
+#
+# Features:
+# - FreeSWITCH 1.10.11 built from source with ALL standard modules
+# - SIP and WebRTC support enabled
+# - Event socket configured for fs_cli
+# - Basic Linux utilities (ps, netstat, ping, etc.)
+# - Extensions 1000 and 1001 pre-configured
+# - Dialplan configured for inter-extension calling
+# - fs_cli command line interface
+# - Supervisor for process management (systemd alternative for Docker)
+#
+# ============================================================================
+
+# Build arguments
+ARG DEBIAN_VERSION=bullseye-slim
+ARG FREESWITCH_VERSION=v1.10.11
+ARG BUILD_CPUS=8
+
+# ============================================================================
+# Stage 1: Build Dependencies
+# ============================================================================
+FROM debian:${DEBIAN_VERSION} AS builder
+
+ARG FREESWITCH_VERSION
+ARG BUILD_CPUS
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build tools
+    build-essential \
+    cmake \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    git \
+    wget \
+    ca-certificates \
+    # FreeSWITCH core dependencies
+    libssl-dev \
+    libcurl4-openssl-dev \
+    libpcre3-dev \
+    libspeex1 \
+    libspeexdsp-dev \
+    libedit-dev \
+    libtiff-dev \
+    libldns-dev \
+    # Codecs and media
+    libopus-dev \
+    libsndfile1-dev \
+    libshout3-dev \
+    libmpg123-dev \
+    libmp3lame-dev \
+    # Database
+    libsqlite3-dev \
+    libpq-dev \
+    # SIP dependencies
+    libsofia-sip-ua-dev \
+    # WebRTC dependencies
+    libsrtp2-dev \
+    # Video support
+    libavformat-dev \
+    libswscale-dev \
+    libyuv-dev \
+    # XML processing
+    libxml2-dev \
+    # Lua scripting
+    liblua5.2-dev \
+    # Performance
+    libgoogle-perftools-dev \
+    # Utilities
+    python3 \
+    python-is-python3 \
+    zlib1g-dev \
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/local/src
+
+# Clone FreeSWITCH source
+RUN git clone -b ${FREESWITCH_VERSION} --depth 1 https://github.com/signalwire/freeswitch.git
+
+WORKDIR /usr/local/src/freeswitch
+
+# Bootstrap FreeSWITCH
+RUN ./bootstrap.sh -j
+
+# Configure with all standard modules enabled
+RUN ./configure \
+    --prefix=/usr/local/freeswitch \
+    --enable-core-pgsql-support \
+    --enable-core-odbc-support \
+    --enable-static-v8 \
+    --enable-tcmalloc \
+    && echo "✅ FreeSWITCH configured"
+
+# Build FreeSWITCH
+RUN make -j ${BUILD_CPUS} && echo "✅ FreeSWITCH compiled"
+
+# Install FreeSWITCH
+RUN make install && echo "✅ FreeSWITCH installed"
+
+# Install sounds (en-us-callie)
+RUN make cd-sounds-install cd-moh-install && echo "✅ Sounds installed"
+
+# Install sample configuration
+RUN cp -r /usr/local/src/freeswitch/conf/vanilla/* /usr/local/freeswitch/conf/ \
+    && echo "✅ Sample configuration installed"
+
+# ============================================================================
+# Stage 2: Runtime Image
+# ============================================================================
+FROM debian:${DEBIAN_VERSION} AS runtime
+
+# Install runtime dependencies and utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core runtime libraries
+    libssl1.1 \
+    libcurl4 \
+    libpcre3 \
+    libspeex1 \
+    libspeexdsp1 \
+    libedit2 \
+    libtiff5 \
+    libldns3 \
+    # Codecs
+    libopus0 \
+    libsndfile1 \
+    libshout3 \
+    libmpg123-0 \
+    libmp3lame0 \
+    # Database
+    libsqlite3-0 \
+    libpq5 \
+    # SIP
+    libsofia-sip-ua0 \
+    # WebRTC
+    libsrtp2-1 \
+    # Video
+    libavformat58 \
+    libswscale5 \
+    # XML
+    libxml2 \
+    # Lua
+    liblua5.2-0 \
+    # Performance
+    libtcmalloc-minimal4 \
+    # Utilities (as requested)
+    procps \
+    net-tools \
+    iputils-ping \
+    iproute2 \
+    lsof \
+    vim \
+    curl \
+    wget \
+    ca-certificates \
+    # Process management
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy FreeSWITCH installation from builder
+COPY --from=builder /usr/local/freeswitch /usr/local/freeswitch
+
+# Create FreeSWITCH user and group
+RUN groupadd -r freeswitch && useradd -r -g freeswitch freeswitch
+
+# Set ownership
+RUN chown -R freeswitch:freeswitch /usr/local/freeswitch
+
+# Add FreeSWITCH to PATH
+ENV PATH="/usr/local/freeswitch/bin:${PATH}"
+
+# Set library path
+ENV LD_LIBRARY_PATH="/usr/local/freeswitch/lib:${LD_LIBRARY_PATH}"
+
+# Configure extensions 1000 and 1001
+RUN cat > /usr/local/freeswitch/conf/directory/default/1000.xml <<'EOF'
+<include>
+  <user id="1000">
+    <params>
+      <param name="password" value="1234"/>
+      <param name="vm-password" value="1000"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="1000"/>
+      <variable name="user_context" value="default"/>
+      <variable name="effective_caller_id_name" value="Extension 1000"/>
+      <variable name="effective_caller_id_number" value="1000"/>
+      <variable name="outbound_caller_id_name" value="FreeSWITCH"/>
+      <variable name="outbound_caller_id_number" value="0000000000"/>
+      <variable name="callgroup" value="techsupport"/>
+    </variables>
+  </user>
+</include>
+EOF
+
+RUN cat > /usr/local/freeswitch/conf/directory/default/1001.xml <<'EOF'
+<include>
+  <user id="1001">
+    <params>
+      <param name="password" value="1234"/>
+      <param name="vm-password" value="1001"/>
+    </params>
+    <variables>
+      <variable name="toll_allow" value="domestic,international,local"/>
+      <variable name="accountcode" value="1001"/>
+      <variable name="user_context" value="default"/>
+      <variable name="effective_caller_id_name" value="Extension 1001"/>
+      <variable name="effective_caller_id_number" value="1001"/>
+      <variable name="outbound_caller_id_name" value="FreeSWITCH"/>
+      <variable name="outbound_caller_id_number" value="0000000000"/>
+      <variable name="callgroup" value="techsupport"/>
+    </variables>
+  </user>
+</include>
+EOF
+
+# Fix ownership for new extension files
+RUN chown freeswitch:freeswitch /usr/local/freeswitch/conf/directory/default/1000.xml \
+    && chown freeswitch:freeswitch /usr/local/freeswitch/conf/directory/default/1001.xml
+
+# Create supervisor configuration
+RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/freeswitch.conf <<'EOF'
+[program:freeswitch]
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf
+autostart=true
+autorestart=true
+startretries=3
+user=freeswitch
+stdout_logfile=/var/log/supervisor/freeswitch.log
+stderr_logfile=/var/log/supervisor/freeswitch_err.log
+EOF
+
+# Create entrypoint script
+RUN cat > /entrypoint.sh <<'EOF'
+#!/bin/bash
+set -e
+
+echo "========================================="
+echo "FreeSWITCH 1.10.x Base Image"
+echo "========================================="
+echo ""
+echo "FreeSWITCH Installation: /usr/local/freeswitch"
+echo "Configuration: /usr/local/freeswitch/conf"
+echo "Logs: /usr/local/freeswitch/log"
+echo ""
+echo "Pre-configured Extensions:"
+echo "  - 1000 (password: 1234)"
+echo "  - 1001 (password: 1234)"
+echo ""
+echo "Available Commands:"
+echo "  - freeswitch  : Start FreeSWITCH"
+echo "  - fs_cli      : FreeSWITCH CLI"
+echo "  - ps, netstat, ping : System utilities"
+echo ""
+echo "Exposed Ports:"
+echo "  - 5060/5061   : SIP"
+echo "  - 5080/5081   : WebSocket SIP"
+echo "  - 8021        : Event Socket (fs_cli)"
+echo "  - 7443        : WebRTC"
+echo "  - 16384-32768 : RTP Media"
+echo ""
+echo "========================================="
+echo ""
+
+# If no command specified, start supervisor
+if [ $# -eq 0 ]; then
+    echo "Starting FreeSWITCH via supervisor..."
+    exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf
+else
+    # Execute provided command
+    exec "$@"
+fi
+EOF
+
+RUN chmod +x /entrypoint.sh
+
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor
+
+# Expose ports
+# SIP
+EXPOSE 5060/tcp 5060/udp 5080/tcp 5080/udp
+EXPOSE 5061/tcp 5061/udp 5081/tcp 5081/udp
+# Event Socket (fs_cli)
+EXPOSE 8021/tcp
+# WebRTC
+EXPOSE 7443/tcp
+EXPOSE 5066/tcp
+# RTP Media
+EXPOSE 16384-32768/udp
+
+# Volumes
+VOLUME ["/usr/local/freeswitch/conf", "/usr/local/freeswitch/log", "/usr/local/freeswitch/db"]
+
+WORKDIR /usr/local/freeswitch
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD []
