@@ -61,10 +61,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsofia-sip-ua-dev \
     # WebRTC dependencies
     libsrtp2-dev \
-    # Video support
+    # Video support (libyuv-dev not available in bullseye)
     libavformat-dev \
     libswscale-dev \
-    libyuv-dev \
     # XML processing
     libxml2-dev \
     # Lua scripting
