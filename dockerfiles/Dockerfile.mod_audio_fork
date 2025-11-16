@@ -72,16 +72,30 @@ RUN echo "=========================================" \
     && echo "Building mod_audio_fork..." \
     && echo "=========================================" \
     && cd /usr/local/src/mod_audio_fork \
-    && ls -la \
     && echo "" \
-    && echo "Compiling mod_audio_fork with g++..." \
-    && g++ -fPIC -shared \
+    && echo "Compiling C file with gcc..." \
+    && gcc -fPIC -c \
         -I/usr/local/freeswitch/include/freeswitch \
         -I/usr/local/include \
-        -o /usr/local/freeswitch/mod/mod_audio_fork.so \
+        -o mod_audio_fork.o \
         mod_audio_fork.c \
+    && echo "Compiling C++ files with g++..." \
+    && g++ -fPIC -c \
+        -I/usr/local/freeswitch/include/freeswitch \
+        -I/usr/local/include \
+        -o lws_glue.o \
         lws_glue.cpp \
+    && g++ -fPIC -c \
+        -I/usr/local/freeswitch/include/freeswitch \
+        -I/usr/local/include \
+        -o audio_pipe.o \
         audio_pipe.cpp \
+    && echo "Linking module..." \
+    && g++ -shared \
+        -o /usr/local/freeswitch/mod/mod_audio_fork.so \
+        mod_audio_fork.o \
+        lws_glue.o \
+        audio_pipe.o \
         -lwebsockets \
         -lpthread \
         -lssl \
