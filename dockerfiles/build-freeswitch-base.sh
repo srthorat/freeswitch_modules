@@ -60,7 +60,7 @@ START_TIME=$(date +%s)
 docker build \
     --platform "$PLATFORM" \
     --build-arg BUILD_CPUS="$BUILD_CPUS" \
-    -f Dockerfile.base \
+    -f dockerfiles/Dockerfile.freeswitch-base \
     -t "$IMAGE_NAME" \
     .
 

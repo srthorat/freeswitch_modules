@@ -1,6 +1,50 @@
-# Individual Module Testing with Docker
+# FreeSWITCH Docker Images
 
-This directory contains Dockerfiles for testing individual FreeSWITCH modules in isolation. This approach provides several benefits:
+This directory contains Dockerfiles for building FreeSWITCH images with different configurations:
+
+1. **Base Image** - Complete FreeSWITCH installation with all standard modules
+2. **Individual Module Images** - Minimal FreeSWITCH with specific modules for testing
+
+---
+
+## 1. FreeSWITCH Base Image (Recommended Starting Point)
+
+**File**: `Dockerfile.freeswitch-base`
+**Build Script**: `build-freeswitch-base.sh`
+**Documentation**: `README.freeswitch-base.md`
+
+### Features
+- ✅ FreeSWITCH 1.10.11 (production release) built from source
+- ✅ All standard modules compiled and available
+- ✅ SIP and WebRTC support
+- ✅ Event socket enabled (fs_cli ready)
+- ✅ Extensions 1000 and 1001 pre-configured
+- ✅ System utilities (ps, netstat, ping, vim, curl)
+- ✅ Supervisor for process management
+
+### Quick Start
+```bash
+# Build (30-45 minutes on Intel, 60-90 on Apple Silicon)
+./dockerfiles/build-freeswitch-base.sh
+
+# Run
+docker run --rm -it --name fs --network host freeswitch-base:1.10.11
+
+# Connect with fs_cli
+docker exec -it fs fs_cli
+```
+
+### Use Cases
+- Production-ready FreeSWITCH deployment
+- Testing SIP/WebRTC functionality
+- Base for extending with custom modules
+- Learning FreeSWITCH configuration
+
+---
+
+## 2. Individual Module Testing
+
+This approach provides several benefits:
 
 ## Benefits
 
