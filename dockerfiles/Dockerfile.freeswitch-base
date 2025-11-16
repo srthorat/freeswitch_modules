@@ -335,15 +335,10 @@ RUN chown freeswitch:freeswitch /usr/local/freeswitch/conf/autoload_configs/even
 RUN mkdir -p /usr/local/freeswitch/log /usr/local/freeswitch/db \
  && chown -R freeswitch:freeswitch /usr/local/freeswitch
 
-# Create supervisor configuration
-# Supervisor FS runner
+# Create supervisor configuration (single-line command!)
 RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/freeswitch.conf <<'EOF'
 [program:freeswitch]
-command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf \
-  -conf /usr/local/freeswitch/conf \
-  -log /usr/local/freeswitch/log \
-  -db /usr/local/freeswitch/db \
-  -loglevel DEBUG
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf -conf /usr/local/freeswitch/conf -log /usr/local/freeswitch/log -db /usr/local/freeswitch/db
 autostart=true
 autorestart=true
 user=freeswitch
