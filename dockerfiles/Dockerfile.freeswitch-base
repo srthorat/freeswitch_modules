@@ -332,14 +332,20 @@ RUN cat > /usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml <<'E
 EOF
 
 RUN chown freeswitch:freeswitch /usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml
+RUN mkdir -p /usr/local/freeswitch/log /usr/local/freeswitch/db \
+ && chown -R freeswitch:freeswitch /usr/local/freeswitch
 
 # Create supervisor configuration
+# Supervisor FS runner
 RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/freeswitch.conf <<'EOF'
 [program:freeswitch]
-command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf -conf /usr/local/freeswitch/conf -log /usr/local/freeswitch/log -db /usr/local/freeswitch/db
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf \
+  -conf /usr/local/freeswitch/conf \
+  -log /usr/local/freeswitch/log \
+  -db /usr/local/freeswitch/db \
+  -loglevel DEBUG
 autostart=true
 autorestart=true
-startretries=3
 user=freeswitch
 stdout_logfile=/var/log/supervisor/freeswitch.log
 stderr_logfile=/var/log/supervisor/freeswitch_err.log
@@ -354,9 +360,12 @@ echo "========================================="
 echo "FreeSWITCH 1.10.x Base Image"
 echo "========================================="
 echo ""
-echo "FreeSWITCH Installation: /usr/local/freeswitch"
-echo "Configuration: /usr/local/freeswitch/conf"
-echo "Logs: /usr/local/freeswitch/log"
+echo " FS Home   : /usr/local/freeswitch"
+echo " Config    : /usr/local/freeswitch/conf"
+echo " Logs      : /usr/local/freeswitch/log"
+echo " DB        : /usr/local/freeswitch/db"
+echo " ESL       : 0.0.0.0:8021 (password: ClueCon)"
+echo " LogLevel  : DEBUG"
 echo ""
 echo "Pre-configured Extensions:"
 echo "  - 1000 (password: 1234)"
