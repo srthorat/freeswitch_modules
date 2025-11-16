@@ -336,7 +336,7 @@ RUN chown freeswitch:freeswitch /usr/local/freeswitch/conf/autoload_configs/even
 # Create supervisor configuration
 RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/freeswitch.conf <<'EOF'
 [program:freeswitch]
-command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf -conf /usr/local/freeswitch/conf -log /usr/local/freeswitch/log -db /usr/local/freeswitch/db
 autostart=true
 autorestart=true
 startretries=3

@@ -708,7 +708,113 @@ fs_cli -x "status"
 
 ---
 
-### Error 13: Language Bindings (Java, Perl, PHP)
+### Error 13: FreeSWITCH Not Loading Configuration (Module Exists But Won't Load)
+
+**Error Message**:
+```bash
+# fs_cli still fails even though module exists
+docker exec freeswitch ls -la /usr/local/freeswitch/lib/freeswitch/mod/mod_event_socket.so
+# Shows: -rw-r--r-- 1 root root ... mod_event_socket.so (FILE EXISTS!)
+
+docker exec freeswitch netstat -an | grep 8021
+# Shows: (nothing - port not listening)
+
+docker exec -it freeswitch fs_cli
+# [ERROR] fs_cli.c:1699 main() Error Connecting []
+```
+
+**Symptoms**:
+- `mod_event_socket.so` binary **exists** in `/usr/local/freeswitch/lib/freeswitch/mod/`
+- Port 8021 is **not listening**
+- `fs_cli` shows "Error Connecting []"
+- FreeSWITCH **is running** (SIP works on port 5060)
+- No `freeswitch.log` created in `/usr/local/freeswitch/log/`
+- FreeSWITCH appears to run with minimal/fallback configuration
+
+**Root Cause**:
+FreeSWITCH was started **without specifying configuration paths**. The supervisor command was:
+```bash
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf
+```
+
+Without `-conf`, `-log`, and `-db` flags, FreeSWITCH uses **default search paths** (`/etc/freeswitch`, `/usr/local/etc/freeswitch`) which don't match our custom prefix `/usr/local/freeswitch`.
+
+Result:
+- FreeSWITCH starts but doesn't load `/usr/local/freeswitch/conf/`
+- `event_socket.conf.xml` is never loaded
+- Module binary exists but is never activated
+- No logs are written to the expected location
+
+**Solution**:
+Start FreeSWITCH with **explicit configuration paths** in supervisor command:
+
+**Code**:
+```dockerfile
+# Supervisor configuration with explicit paths
+RUN mkdir -p /etc/supervisor/conf.d && cat > /etc/supervisor/conf.d/freeswitch.conf <<'EOF'
+[program:freeswitch]
+command=/usr/local/freeswitch/bin/freeswitch -nonat -nc -nf \
+  -conf /usr/local/freeswitch/conf \
+  -log  /usr/local/freeswitch/log \
+  -db   /usr/local/freeswitch/db
+autostart=true
+autorestart=true
+startretries=3
+user=freeswitch
+stdout_logfile=/var/log/supervisor/freeswitch.log
+stderr_logfile=/var/log/supervisor/freeswitch_err.log
+EOF
+```
+
+**Why This Happens**:
+- FreeSWITCH has **hardcoded default paths** in its source code
+- When built with `--prefix=/usr/local/freeswitch`, binaries go to custom location
+- BUT: without explicit `-conf` flag, FreeSWITCH searches default paths first
+- This is a common issue with custom FreeSWITCH installations
+
+**FreeSWITCH Default Search Order** (without `-conf`):
+1. `/etc/freeswitch/` (doesn't exist)
+2. `/usr/local/etc/freeswitch/` (doesn't exist)
+3. Fallback to minimal embedded config
+4. Never checks `/usr/local/freeswitch/conf/` (our actual config location!)
+
+**Verification After Fix**:
+```bash
+# Check module loads correctly
+docker exec freeswitch bash -c "ls /usr/local/freeswitch/lib/freeswitch/mod/mod_event_socket.so"
+# Should exist
+
+# Check port 8021 is listening
+docker exec freeswitch netstat -an | grep 8021
+# Should show: tcp 0 0 0.0.0.0:8021 0.0.0.0:* LISTEN
+
+# Check logs are being created
+docker exec freeswitch ls -la /usr/local/freeswitch/log/freeswitch.log
+# Should exist and grow over time
+
+# Test fs_cli connection
+docker exec -it freeswitch fs_cli
+# Should show FreeSWITCH CLI prompt
+```
+
+**Impact**:
+- ❌ Without explicit paths: FreeSWITCH runs but with wrong/minimal config
+- ❌ Modules exist but don't load
+- ❌ No proper logging
+- ❌ Event Socket never activates
+- ✅ With explicit paths: All modules load correctly, fs_cli works, full functionality
+
+**Best Practice**:
+Always start FreeSWITCH in Docker with explicit paths:
+- `-conf /usr/local/freeswitch/conf` (configuration directory)
+- `-log /usr/local/freeswitch/log` (log directory)
+- `-db /usr/local/freeswitch/db` (database directory)
+
+This makes the system **predictable**, **debuggable**, and **production-ready**.
+
+---
+
+### Error 14: Language Bindings (Java, Perl, PHP)
 
 **Not yet encountered, but proactively disabled**
 
