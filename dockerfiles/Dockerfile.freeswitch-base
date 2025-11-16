@@ -165,6 +165,7 @@ RUN ./configure \
     --enable-core-odbc-support \
     --enable-tcmalloc \
     --without-python \
+    --without-python3 \
     --without-java \
     --without-perl \
     && echo "✅ FreeSWITCH configured"
