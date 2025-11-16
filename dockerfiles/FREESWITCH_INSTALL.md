@@ -626,7 +626,67 @@ RUN mkdir -p /usr/local/freeswitch/conf \
 
 ---
 
-### Error 12: Language Bindings (Java, Perl, PHP)
+### Error 12: Event Socket Module Not Built (fs_cli Can't Connect)
+
+**Error Message**:
+```bash
+# fs_cli
+[ERROR] fs_cli.c:1699 main() Error Connecting []
+Usage: fs_cli [-H <host>] [-P <port>] [-p <secret>]...
+```
+
+**Symptoms**:
+- `fs_cli` shows "Error Connecting []"
+- Port 8021 is not listening: `netstat -an | grep 8021` shows nothing
+- Module file missing: `/usr/local/freeswitch/mod/mod_event_socket.so` doesn't exist
+- FreeSWITCH runs but Event Socket interface unavailable
+- SIP profiles work normally (ports 5060, 5080)
+
+**Explanation**:
+- `mod_event_socket` provides the Event Socket Layer (ESL) interface
+- Required for `fs_cli` to connect and control FreeSWITCH
+- Default FreeSWITCH `modules.conf` may not include it in `event_handlers/` section
+- If not in `modules.conf`, the module won't be compiled during `make`
+- Without this module, fs_cli has no way to connect to FreeSWITCH
+
+**Solution**:
+- Explicitly ensure `mod_event_socket` is enabled in `modules.conf` before building
+
+**Code**:
+```dockerfile
+# After bootstrap, before disabling optional modules
+RUN grep -q "^event_handlers/mod_event_socket$" modules.conf || \
+    echo "event_handlers/mod_event_socket" >> modules.conf \
+    && echo "✅ Ensured critical modules are enabled (mod_event_socket)"
+```
+
+**Why this happens**:
+- FreeSWITCH source's default `modules.conf` varies by version
+- Some versions don't include `mod_event_socket` by default
+- The module must be explicitly listed under `event_handlers/` section
+- Without it, configure/make skip the module entirely
+
+**Verification**:
+```bash
+# Check if module exists after build
+ls -la /usr/local/freeswitch/mod/mod_event_socket.so
+
+# Check if port 8021 is listening
+netstat -an | grep 8021
+
+# Test fs_cli connection
+fs_cli -x "status"
+```
+
+**Impact**: Without Event Socket:
+- ❌ Can't use `fs_cli` for management
+- ❌ Can't use Event Socket Library (ESL) for external applications
+- ❌ Can't execute API commands remotely
+- ✅ SIP calling still works (different module)
+
+---
+
+### Error 13: Language Bindings (Java, Perl, PHP)
 
 **Not yet encountered, but proactively disabled**
 
