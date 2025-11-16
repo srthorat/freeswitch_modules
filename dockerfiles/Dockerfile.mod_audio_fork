@@ -172,6 +172,7 @@ RUN echo "=========================================" \
   </modules>
 </configuration>
 EOF
+; \
         echo "✅ Created modules.conf.xml with mod_audio_fork"; \
     fi \
     && echo "" \
