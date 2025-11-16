@@ -651,14 +651,36 @@ Usage: fs_cli [-H <host>] [-P <port>] [-p <secret>]...
 
 **Solution**:
 - Explicitly ensure `mod_event_socket` is enabled in `modules.conf` before building
+- Configure Event Socket to bind to IPv4 instead of IPv6
 
 **Code**:
 ```dockerfile
-# After bootstrap, before disabling optional modules
+# 1. Enable module in modules.conf (after bootstrap, before disabling optional modules)
 RUN grep -q "^event_handlers/mod_event_socket$" modules.conf || \
     echo "event_handlers/mod_event_socket" >> modules.conf \
     && echo "✅ Ensured critical modules are enabled (mod_event_socket)"
+
+# 2. Configure Event Socket for IPv4 binding (in runtime stage)
+RUN cat > /usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml <<'EOF'
+<configuration name="event_socket.conf" description="Socket Client">
+  <settings>
+    <param name="nat-map" value="false"/>
+    <!-- Bind to IPv4 localhost for fs_cli access -->
+    <param name="listen-ip" value="127.0.0.1"/>
+    <param name="listen-port" value="8021"/>
+    <param name="password" value="ClueCon"/>
+    <!--<param name="apply-inbound-acl" value="loopback.auto"/>-->
+    <!--<param name="stop-on-bind-error" value="true"/>-->
+  </settings>
+</configuration>
+EOF
 ```
+
+**IPv4 vs IPv6 Binding**:
+- Default config uses `::` (IPv6 all interfaces)
+- Docker containers work better with `127.0.0.1` (IPv4 localhost)
+- This ensures fs_cli can connect reliably
+- For external access, change to `0.0.0.0` (all IPv4 interfaces)
 
 **Why this happens**:
 - FreeSWITCH source's default `modules.conf` varies by version
