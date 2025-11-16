@@ -57,9 +57,15 @@ echo ""
 # Record start time
 START_TIME=$(date +%s)
 
+# Read dependency versions from .env
+SPANDSP_VERSION=$(grep spandspVersion .env | awk -F '=' '{print $2}' | awk '{print $1}')
+SOFIA_VERSION=$(grep sofiaVersion .env | awk -F '=' '{print $2}' | awk '{print $1}')
+
 docker build \
     --platform "$PLATFORM" \
     --build-arg BUILD_CPUS="$BUILD_CPUS" \
+    --build-arg SPANDSP_VERSION="$SPANDSP_VERSION" \
+    --build-arg SOFIA_VERSION="$SOFIA_VERSION" \
     -f dockerfiles/Dockerfile.freeswitch-base \
     -t "$IMAGE_NAME" \
     .

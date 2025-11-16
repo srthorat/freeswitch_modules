@@ -17,6 +17,8 @@
 # Build arguments
 ARG DEBIAN_VERSION=bullseye-slim
 ARG FREESWITCH_VERSION=v1.10.11
+ARG SPANDSP_VERSION=0d2e6ac
+ARG SOFIA_VERSION=1.13.17
 ARG BUILD_CPUS=8
 
 # ============================================================================
@@ -78,6 +80,58 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# Stage 1.5: Build spandsp (required dependency)
+# ============================================================================
+FROM builder AS spandsp
+ARG SPANDSP_VERSION
+ARG BUILD_CPUS
+
+WORKDIR /usr/local/src
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+
+RUN git clone https://github.com/freeswitch/spandsp.git \
+    && cd spandsp \
+    && git checkout ${SPANDSP_VERSION} \
+    && ./bootstrap.sh \
+    && ./configure \
+    && make -j ${BUILD_CPUS} \
+    && make install \
+    && echo "✅ spandsp installed"
+
+# ============================================================================
+# Stage 1.6: Build sofia-sip (required dependency)
+# ============================================================================
+FROM builder AS sofia-sip
+ARG SOFIA_VERSION
+ARG BUILD_CPUS
+
+WORKDIR /usr/local/src
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+
+RUN git clone --depth 1 -b v${SOFIA_VERSION} https://github.com/freeswitch/sofia-sip.git \
+    && cd sofia-sip \
+    && ./bootstrap.sh \
+    && ./configure \
+    && make -j ${BUILD_CPUS} \
+    && make install \
+    && echo "✅ sofia-sip installed"
+
+# ============================================================================
+# Stage 2: Build FreeSWITCH
+# ============================================================================
+FROM builder AS freeswitch-build
+ARG FREESWITCH_VERSION
+ARG BUILD_CPUS
+
+# Copy dependencies from previous stages
+COPY --from=spandsp /usr/local/include/ /usr/local/include/
+COPY --from=spandsp /usr/local/lib/ /usr/local/lib/
+COPY --from=sofia-sip /usr/local/bin/ /usr/local/bin/
+COPY --from=sofia-sip /usr/local/include/ /usr/local/include/
+COPY --from=sofia-sip /usr/local/lib/ /usr/local/lib/
+COPY --from=sofia-sip /usr/local/share/sofia-sip/ /usr/local/share/sofia-sip/
 
 WORKDIR /usr/local/src
 
@@ -164,8 +218,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy dependencies from build stages
+COPY --from=spandsp /usr/local/lib/ /usr/local/lib/
+COPY --from=sofia-sip /usr/local/bin/ /usr/local/bin/
+COPY --from=sofia-sip /usr/local/lib/ /usr/local/lib/
+COPY --from=sofia-sip /usr/local/share/sofia-sip/ /usr/local/share/sofia-sip/
+
 # Copy FreeSWITCH installation from builder
-COPY --from=builder /usr/local/freeswitch /usr/local/freeswitch
+COPY --from=freeswitch-build /usr/local/freeswitch /usr/local/freeswitch
+
+# Run ldconfig to update library cache
+RUN ldconfig
 
 # Create FreeSWITCH user and group
 RUN groupadd -r freeswitch && useradd -r -g freeswitch freeswitch
