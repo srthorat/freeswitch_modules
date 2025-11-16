@@ -145,6 +145,10 @@ WORKDIR /usr/local/src/freeswitch
 # Bootstrap FreeSWITCH
 RUN ./bootstrap.sh -j
 
+# Ensure critical modules are enabled in modules.conf
+RUN grep -q "^event_handlers/mod_event_socket$" modules.conf || echo "event_handlers/mod_event_socket" >> modules.conf \
+    && echo "✅ Ensured critical modules are enabled (mod_event_socket)"
+
 # Disable modules that require unavailable dependencies
 # mod_verto requires libks2/libks (WebRTC verto protocol - can skip for base)
 # mod_signalwire requires additional deps
