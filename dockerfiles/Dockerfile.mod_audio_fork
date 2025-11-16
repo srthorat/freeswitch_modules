@@ -91,6 +91,7 @@ RUN echo "=========================================" \
         -o audio_pipe.o \
         audio_pipe.cpp \
     && echo "Linking module..." \
+    && mkdir -p /usr/local/freeswitch/mod \
     && g++ -shared \
         -o /usr/local/freeswitch/mod/mod_audio_fork.so \
         mod_audio_fork.o \
