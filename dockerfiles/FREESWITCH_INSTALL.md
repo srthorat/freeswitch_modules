@@ -665,8 +665,8 @@ RUN cat > /usr/local/freeswitch/conf/autoload_configs/event_socket.conf.xml <<'E
 <configuration name="event_socket.conf" description="Socket Client">
   <settings>
     <param name="nat-map" value="false"/>
-    <!-- Bind to IPv4 localhost for fs_cli access -->
-    <param name="listen-ip" value="127.0.0.1"/>
+    <!-- Bind to all IPv4 interfaces for fs_cli access -->
+    <param name="listen-ip" value="0.0.0.0"/>
     <param name="listen-port" value="8021"/>
     <param name="password" value="ClueCon"/>
     <!--<param name="apply-inbound-acl" value="loopback.auto"/>-->
@@ -678,9 +678,9 @@ EOF
 
 **IPv4 vs IPv6 Binding**:
 - Default config uses `::` (IPv6 all interfaces)
-- Docker containers work better with `127.0.0.1` (IPv4 localhost)
-- This ensures fs_cli can connect reliably
-- For external access, change to `0.0.0.0` (all IPv4 interfaces)
+- We use `0.0.0.0` (all IPv4 interfaces) for Docker compatibility
+- This allows fs_cli to connect from both inside container and host machine
+- For security, use `127.0.0.1` (localhost only) or enable ACL
 
 **Why this happens**:
 - FreeSWITCH source's default `modules.conf` varies by version
