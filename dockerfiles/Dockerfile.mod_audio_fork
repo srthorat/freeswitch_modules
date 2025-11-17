@@ -26,7 +26,7 @@ ARG BUILD_CPUS=4
 RUN echo "=============================================" \
     && echo "Building mod_audio_fork" \
     && echo "=============================================" \
-    && echo "Base Image: srt2011/freeswitch-base:latest" \
+    && echo "Base Image: ${BASE_IMAGE}" \
     && echo "Dependency: libwebsockets ${LIBWEBSOCKETS_VERSION}" \
     && echo "Build CPUs: ${BUILD_CPUS}" \
     && echo "============================================="
@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y --quiet --no-install-recommends \
 ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
 
 # ============================================================================
-# Build libwebsockets (ONLY dependency for mod_audio_fork)
+# Build libwebsockets (required dependency)
 # ============================================================================
 WORKDIR /usr/local/src
 RUN echo "=========================================" \
@@ -64,8 +64,6 @@ RUN echo "=========================================" \
 # Copy mod_audio_fork source and build it
 # ============================================================================
 WORKDIR /usr/local/src
-
-# Copy mod_audio_fork module source
 COPY ./modules/mod_audio_fork /usr/local/src/mod_audio_fork
 
 RUN echo "=========================================" \
@@ -77,26 +75,17 @@ RUN echo "=========================================" \
     && gcc -fPIC -c \
         -I/usr/local/freeswitch/include/freeswitch \
         -I/usr/local/include \
-        -o mod_audio_fork.o \
         mod_audio_fork.c \
     && echo "Compiling C++ files with g++..." \
     && g++ -fPIC -c \
         -I/usr/local/freeswitch/include/freeswitch \
         -I/usr/local/include \
-        -o lws_glue.o \
-        lws_glue.cpp \
-    && g++ -fPIC -c \
-        -I/usr/local/freeswitch/include/freeswitch \
-        -I/usr/local/include \
-        -o audio_pipe.o \
-        audio_pipe.cpp \
+        *.cpp \
     && echo "Linking module..." \
-    && mkdir -p /usr/local/freeswitch/mod \
+    && mkdir -p /usr/local/freeswitch/lib/freeswitch/mod \
     && g++ -shared \
-        -o /usr/local/freeswitch/mod/mod_audio_fork.so \
-        mod_audio_fork.o \
-        lws_glue.o \
-        audio_pipe.o \
+        -o /usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so \
+        *.o \
         -lwebsockets \
         -lpthread \
         -lssl \
@@ -104,7 +93,7 @@ RUN echo "=========================================" \
     && echo "✅ mod_audio_fork compiled successfully" \
     && echo "" \
     && echo "Module location:" \
-    && ls -lh /usr/local/freeswitch/mod/mod_audio_fork.so
+    && ls -lh /usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so
 
 # ============================================================================
 # Validation Stage: Verify module dependencies
@@ -112,15 +101,13 @@ RUN echo "=========================================" \
 RUN echo "=========================================" \
     && echo "Module Validation" \
     && echo "=========================================" \
-    && MODULE_PATH="/usr/local/freeswitch/mod/mod_audio_fork.so" \
+    && MODULE_PATH="/usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so" \
     && echo "" \
     && echo "1. Check module file exists:" \
     && if [ -f "$MODULE_PATH" ]; then \
-        echo "✅ Module file exists"; \
-        ls -lh "$MODULE_PATH"; \
+        echo "✅ Module file exists"; ls -lh "$MODULE_PATH"; \
     else \
-        echo "❌ ERROR: Module file not found: $MODULE_PATH"; \
-        exit 1; \
+        echo "❌ ERROR: Module file not found: $MODULE_PATH"; exit 1; \
     fi \
     && echo "" \
     && echo "2. Check module dependencies with ldd:" \
@@ -131,15 +118,13 @@ RUN echo "=========================================" \
         echo "✅ Module correctly linked with libwebsockets"; \
         ldd "$MODULE_PATH" | grep libwebsockets; \
     else \
-        echo "❌ ERROR: Module not linked with libwebsockets"; \
-        exit 1; \
+        echo "❌ ERROR: Module not linked with libwebsockets"; exit 1; \
     fi \
     && echo "" \
     && echo "4. Check for missing dependencies:" \
     && if ldd "$MODULE_PATH" | grep -q "not found"; then \
         echo "❌ ERROR: Missing dependencies:"; \
-        ldd "$MODULE_PATH" | grep "not found"; \
-        exit 1; \
+        ldd "$MODULE_PATH" | grep "not found"; exit 1; \
     else \
         echo "✅ No missing dependencies"; \
     fi \
@@ -170,12 +155,10 @@ RUN export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH \
 # ============================================================================
 FROM ${BASE_IMAGE} AS runtime
 
-# Copy libwebsockets library from builder
+# Copy mod_audio_fork module and libwebsockets
+COPY --from=builder /usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so /usr/local/freeswitch/lib/freeswitch/mod/
 COPY --from=builder /usr/local/lib/libwebsockets.so* /usr/local/lib/
 COPY --from=builder /usr/local/include/libwebsockets* /usr/local/include/
-
-# Copy mod_audio_fork module
-COPY --from=builder /usr/local/freeswitch/mod/mod_audio_fork.so /usr/local/freeswitch/mod/
 
 # Copy updated modules.conf.xml
 COPY --from=builder /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml /usr/local/freeswitch/conf/autoload_configs/
@@ -186,9 +169,6 @@ RUN ldconfig
 # Set environment
 ENV PATH="/usr/local/freeswitch/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH}"
-
-# Note: Inheriting ENTRYPOINT and CMD from base image (srt2011/freeswitch-base:latest)
-# This ensures the image behaves identically to the base, with mod_audio_fork added
 
 # Labels
 LABEL maintainer="FreeSWITCH mod_audio_fork"
