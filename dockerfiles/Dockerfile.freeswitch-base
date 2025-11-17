@@ -91,7 +91,7 @@ ARG SPANDSP_VERSION
 ARG BUILD_CPUS
 
 WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 RUN git clone https://github.com/freeswitch/spandsp.git \
     && cd spandsp \
@@ -110,7 +110,7 @@ ARG SOFIA_VERSION
 ARG BUILD_CPUS
 
 WORKDIR /usr/local/src
-ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 RUN git clone --depth 1 -b v${SOFIA_VERSION} https://github.com/freeswitch/sofia-sip.git \
     && cd sofia-sip \
@@ -256,6 +256,12 @@ COPY --from=freeswitch-build /usr/local/freeswitch /usr/local/freeswitch
 # Run ldconfig to update library cache
 RUN ldconfig
 
+### Fix NAT for Docker networking (use local_ip_v4 instead of STUN)
+RUN sed -i 's|<!-- *<param name="ext-rtp-ip".*|<param name="ext-rtp-ip" value="$${local_ip_v4}"/>|' \
+    /usr/local/freeswitch/conf/sip_profiles/internal.xml && \
+    sed -i 's|<!-- *<param name="ext-sip-ip".*|<param name="ext-sip-ip" value="$${local_ip_v4}"/>|' \
+    /usr/local/freeswitch/conf/sip_profiles/internal.xml
+
 # Create FreeSWITCH user and group
 RUN groupadd -r freeswitch && useradd -r -g freeswitch freeswitch
 
@@ -266,7 +272,7 @@ RUN chown -R freeswitch:freeswitch /usr/local/freeswitch
 ENV PATH="/usr/local/freeswitch/bin:${PATH}"
 
 # Set library path
-ENV LD_LIBRARY_PATH="/usr/local/freeswitch/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/freeswitch/lib"
 
 # Configure extensions 1000 and 1001
 RUN cat > /usr/local/freeswitch/conf/directory/default/1000.xml <<'EOF'
