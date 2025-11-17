@@ -256,11 +256,10 @@ COPY --from=freeswitch-build /usr/local/freeswitch /usr/local/freeswitch
 # Run ldconfig to update library cache
 RUN ldconfig
 
-### Fix NAT for Docker networking (use local_ip_v4 instead of STUN)
-RUN sed -i 's|<!-- *<param name="ext-rtp-ip".*|<param name="ext-rtp-ip" value="$${local_ip_v4}"/>|' \
-    /usr/local/freeswitch/conf/sip_profiles/internal.xml && \
-    sed -i 's|<!-- *<param name="ext-sip-ip".*|<param name="ext-sip-ip" value="$${local_ip_v4}"/>|' \
-    /usr/local/freeswitch/conf/sip_profiles/internal.xml
+### Fix NAT (use local_ip_v4 instead of STUN)
+RUN sed -i 's|value="\$\${external_rtp_ip}"|value="\$\${local_ip_v4}"|' /usr/local/freeswitch/conf/sip_profiles/internal.xml && \
+    sed -i 's|value="\$\${external_sip_ip}"|value="\$\${local_ip_v4}"|'  /usr/local/freeswitch/conf/sip_profiles/internal.xml
+
 
 # Create FreeSWITCH user and group
 RUN groupadd -r freeswitch && useradd -r -g freeswitch freeswitch
