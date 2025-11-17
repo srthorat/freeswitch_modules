@@ -146,8 +146,7 @@ docker exec -it fs grep -i "audio_fork" /usr/local/freeswitch/log/freeswitch.log
 2025-11-17 18:37:15.999630 0.00% [CONSOLE] switch_loadable_module.c:1772 Successfully Loaded [mod_audio_fork]
 2025-11-17 18:37:15.999639 0.00% [NOTICE] switch_loadable_module.c:389 Adding API Function 'uuid_audio_fork'
 
-docker exec -it fs ldd /usr/local/freeswitch/lib/freeswitch/mo
-d/mod_audio_fork.so
+docker exec -it fs ldd /usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so
         linux-vdso.so.1 (0x00007ffc44973000)
         libwebsockets.so.19 => /usr/local/lib/libwebsockets.so.19 (0x000073838879e000)
         libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x0000738388777000)
@@ -159,6 +158,33 @@ d/mod_audio_fork.so
         /lib64/ld-linux-x86-64.so.2 (0x00007383888d9000)
         libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000738387eef000)
         libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x0000738387ee9000)
+
+docker exec -it freeswitch fs_cli -x 'show calls'                                                     
+uuid,direction,created,created_epoch,name,state,cid_name,cid_num,ip_addr,dest,presence_id,presence_data,accountcode,callstate,callee_name,callee_num,callee_direction,call_uuid,hostname,sent_callee_name,sent_callee_num,b_uuid,b_direction,b_created,b_created_epoch,b_name,b_state,b_cid_name,b_cid_num,b_ip_addr,b_dest,b_presence_id,b_presence_data,b_accountcode,b_callstate,b_callee_name,b_callee_num,b_callee_direction,b_sent_callee_name,b_sent_callee_num,call_created_epoch
+bba5d840-47d1-4245-8319-deda26f01b95,inbound,2025-11-17 19:09:55,1763406595,sofia/internal/1000@192.168.64.2,CS_EXECUTE,1000,1000,192.168.64.1,1001,1000@192.168.64.2,,1000,ACTIVE,Outbound Call,1001,SEND,bba5d840-47d1-4245-8319-deda26f01b95,docker-desktop,Outbound Call,1001,17f0b761-a8f8-4309-8d9a-224a98f9bfce,outbound,2025-11-17 19:10:06,1763406606,sofia/internal/1001@192.168.64.1:50357,CS_EXCHANGE_MEDIA,Extension 1000,1000,192.168.64.1,1001,1001@192.168.64.2,,,ACTIVE,Outbound Call,1001,SEND,Extension 1000,1000,1763406608
+
+docker exec -it freeswitch fs_cli -x 'uuid_audio_fork bba5d840-47d1-4245-8319-deda26f01b95 start ws://20.244.30.42:8077/stream mono 16k'
++OK Success
+
+python3 fs_ws_dg_01.py 
+2025-11-17 19:09:06,327 [WS-REC] server listening on 0.0.0.0:8077
+✅ WebSocket audio recorder running ws://0.0.0.0:8077/stream
+Features: 🎤 Transcription, 📡 Pusher
+🔄 Ready for connections...
+2025-11-17 19:12:00,549 [WS-REC] connection open
+✅ Deepgram connected - Session: 122_169_28_22_50455_1763406720
+🔌 Connection from ('122.169.28.22', 50455)
+🎤 Transcription enabled - Session: 122_169_28_22_50455_1763406720
+📡 Pusher enabled - Session: 122_169_28_22_50455_1763406720
+👤 [Speaker 0] - 🔥 FINAL - No.
+👤 [Speaker 0] - ⚡ INTERIM - Hello?
+👤 [Speaker 0] - 🔥 FINAL - Hello?
+👤 [Speaker 0] - ⚡ INTERIM - Hello?
+👤 [Speaker 0] - 🔥 FINAL - Hello?
+
+docker exec -it freeswitch fs_cli -x 'uuid_audio_fork bba5d840-47d1-4245-8319-deda26f01b95 stop'                                        
++OK Success
+
 ```
 
 **Features**:
