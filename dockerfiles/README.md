@@ -403,8 +403,6 @@ dockerfiles/
 ├── README.md                           # This file
 ├── Dockerfile.mod_audio_fork          # mod_audio_fork individual testing
 ├── docker-build-mod-audio-fork.sh     # Build script for mod_audio_fork
-├── Dockerfile.mod_audio_stream        # (future) mod_audio_stream testing
-├── docker-build-mod-audio-stream.sh   # (future) Build script
 └── ...                                # Additional modules
 ```
 
