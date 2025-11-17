@@ -149,6 +149,21 @@ docker logs freeswitch
 
 ```bash
 docker exec -it freeswitch fs_cli
+
+docker exec -it freeswitch fs_cli -x "sofia status"
+==>
+                     Name          Type                                       Data      State
+=================================================================================================
+            external-ipv6       profile                   sip:mod_sofia@[::1]:5080      RUNNING (0)
+               172.17.0.2         alias                                   internal      ALIASED
+                 external       profile            sip:mod_sofia@20.192.21.57:5080      RUNNING (0)
+    external::example.com       gateway                    sip:joeuser@example.com      NOREG
+            internal-ipv6       profile                   sip:mod_sofia@[::1]:5060      RUNNING (0)
+                 internal       profile              sip:mod_sofia@172.17.0.2:5060      RUNNING (0)
+=================================================================================================
+
+docker exec -it freeswitch cat  /usr/local/freeswitch/conf/sip_profiles/internal.xml | grep ext-rtp-ip
+==>  <param name="ext-rtp-ip" value="$${local_ip_v4}"/>
 ```
 
 You should see the FreeSWITCH CLI prompt:

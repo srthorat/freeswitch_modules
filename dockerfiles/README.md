@@ -134,6 +134,31 @@ docker exec -it fs fs_cli
 
 # Verify mod_audio_fork loaded
 docker exec -it fs fs_cli -x 'show modules' | grep audio_fork
+api,uuid_audio_fork,mod_audio_fork,/usr/local/freeswitch/lib/freeswitch/mod/mod_audio_fork.so
+
+docker exec -it fs grep -i "audio_fork" /usr/local/freeswitch/log/freeswitch.log
+==>
+2025-11-17 18:37:15.999527 0.00% [NOTICE] mod_audio_fork.c:300 mod_audio_fork API loading..
+2025-11-17 18:37:15.999549 0.00% [NOTICE] lws_glue.cpp:372 mod_audio_fork: audio buffer (in secs):    2 secs
+2025-11-17 18:37:15.999551 0.00% [NOTICE] lws_glue.cpp:373 mod_audio_fork: sub-protocol:              audio.drachtio.org
+2025-11-17 18:37:15.999552 0.00% [NOTICE] lws_glue.cpp:374 mod_audio_fork: lws service threads:       1
+2025-11-17 18:37:15.999623 0.00% [NOTICE] mod_audio_fork.c:324 mod_audio_fork API successfully loaded
+2025-11-17 18:37:15.999630 0.00% [CONSOLE] switch_loadable_module.c:1772 Successfully Loaded [mod_audio_fork]
+2025-11-17 18:37:15.999639 0.00% [NOTICE] switch_loadable_module.c:389 Adding API Function 'uuid_audio_fork'
+
+docker exec -it fs ldd /usr/local/freeswitch/lib/freeswitch/mo
+d/mod_audio_fork.so
+        linux-vdso.so.1 (0x00007ffc44973000)
+        libwebsockets.so.19 => /usr/local/lib/libwebsockets.so.19 (0x000073838879e000)
+        libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x0000738388777000)
+        libstdc++.so.6 => /usr/lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007383885aa000)
+        libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000738388590000)
+        libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007383883bc000)
+        libssl.so.1.1 => /usr/lib/x86_64-linux-gnu/libssl.so.1.1 (0x0000738388329000)
+        libcrypto.so.1.1 => /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 (0x0000738388033000)
+        /lib64/ld-linux-x86-64.so.2 (0x00007383888d9000)
+        libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000738387eef000)
+        libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x0000738387ee9000)
 ```
 
 **Features**:
